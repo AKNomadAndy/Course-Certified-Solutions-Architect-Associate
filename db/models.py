@@ -103,9 +103,9 @@ class Rule(Base):
     name: Mapped[str] = mapped_column(String(160), unique=True)
     priority: Mapped[int] = mapped_column(Integer, default=100)
     trigger_type: Mapped[str] = mapped_column(String(32))
-    trigger_config: Mapped[dict] = mapped_column(JSON, default={})
-    conditions: Mapped[list] = mapped_column(JSON, default=[])
-    actions: Mapped[list] = mapped_column(JSON, default=[])
+    trigger_config: Mapped[dict] = mapped_column(JSON, default=dict)
+    conditions: Mapped[list] = mapped_column(JSON, default=list)
+    actions: Mapped[list] = mapped_column(JSON, default=list)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -116,7 +116,7 @@ class Run(Base):
     rule_id: Mapped[int] = mapped_column(ForeignKey("rules.id"))
     event_key: Mapped[str] = mapped_column(String(180))
     status: Mapped[str] = mapped_column(String(24), default="completed")
-    trace: Mapped[dict] = mapped_column(JSON, default={})
+    trace: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     __table_args__ = (UniqueConstraint("rule_id", "event_key", name="uq_run_rule_event"),)
 
@@ -128,7 +128,7 @@ class ActionResult(Base):
     action_index: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(24))
     message: Mapped[str] = mapped_column(Text)
-    payload: Mapped[dict] = mapped_column(JSON, default={})
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class ErrorLog(Base):
@@ -136,7 +136,7 @@ class ErrorLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     run_id: Mapped[int | None] = mapped_column(ForeignKey("runs.id"), nullable=True)
     message: Mapped[str] = mapped_column(Text)
-    details: Mapped[dict] = mapped_column(JSON, default={})
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
