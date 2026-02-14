@@ -12,7 +12,8 @@ from db import models
 
 
 def _render_table_fallback(nodes, edges, reason: str):
-    st.warning(f"Interactive graph unavailable ({reason}). Showing table + adjacency list.")
+    st.warning(f"Interactive graph unavailable. Showing table + adjacency list.\n{reason}")
+    st.caption("Install optional graph deps to enable interactive view: `pip install streamlit-agraph pyvis`")
     st.dataframe(pd.DataFrame([{"id": n.id, "label": n.label, "type": n.node_type, "ref_id": n.ref_id} for n in nodes]))
     label_map = {n.id: n.label for n in nodes}
     adj = [{"from": label_map.get(e.source_node_id), "to": label_map.get(e.target_node_id), "label": e.label} for e in edges]
@@ -48,7 +49,7 @@ def render(session):
             st.success("Edge created")
 
     rendered = False
-    agraph_error = None
+    errors: list[str] = []
 
     try:
         from streamlit_agraph import Config, Edge, Node, agraph
@@ -63,7 +64,7 @@ def render(session):
             if n:
                 st.info(f"Selected {n.label} ({n.node_type})")
     except Exception as exc:
-        agraph_error = str(exc)
+        errors.append(f"streamlit-agraph failed: {exc}")
 
     if not rendered:
         try:
@@ -71,8 +72,8 @@ def render(session):
             st.info("Rendered with PyVis fallback because streamlit-agraph is unavailable.")
             rendered = True
         except Exception as exc:
-            reason = agraph_error or str(exc)
-            _render_table_fallback(nodes, edges, reason=reason)
+            errors.append(f"pyvis fallback failed: {exc}")
+            _render_table_fallback(nodes, edges, reason="\n".join(errors))
 
     with st.expander("Create account / pod / liability"):
         col1, col2, col3 = st.columns(3)
