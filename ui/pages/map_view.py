@@ -1,10 +1,39 @@
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from sqlalchemy import select
 
 from db import models
+
+
+def _render_table_fallback(nodes, edges, reason: str):
+    st.warning(f"Interactive graph unavailable ({reason}). Showing table + adjacency list.")
+    st.dataframe(pd.DataFrame([{"id": n.id, "label": n.label, "type": n.node_type, "ref_id": n.ref_id} for n in nodes]))
+    label_map = {n.id: n.label for n in nodes}
+    adj = [{"from": label_map.get(e.source_node_id), "to": label_map.get(e.target_node_id), "label": e.label} for e in edges]
+    st.dataframe(pd.DataFrame(adj))
+
+
+def _render_pyvis(nodes, edges):
+    from pyvis.network import Network
+
+    net = Network(height="520px", width="100%", directed=True)
+    palette = {"account": "#4dabf7", "pod": "#69db7c", "liability": "#ff8787"}
+
+    for n in nodes:
+        net.add_node(str(n.id), label=n.label, color=palette.get(n.node_type, "#adb5bd"), title=n.node_type)
+    for e in edges:
+        net.add_edge(str(e.source_node_id), str(e.target_node_id), label=e.label)
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp:
+        net.save_graph(tmp.name)
+        html = Path(tmp.name).read_text(encoding="utf-8")
+    components.html(html, height=540, scrolling=False)
 
 
 def render(session):
@@ -18,25 +47,32 @@ def render(session):
             session.commit()
             st.success("Edge created")
 
+    rendered = False
+    agraph_error = None
+
     try:
         from streamlit_agraph import Config, Edge, Node, agraph
 
         g_nodes = [Node(id=str(n.id), label=n.label, size=20) for n in nodes]
         g_edges = [Edge(source=str(e.source_node_id), target=str(e.target_node_id), label=e.label) for e in edges]
-        config = Config(width="100%", height=500, directed=True, physics=True)
+        config = Config(width="100%", height=520, directed=True, physics=True)
         selected = agraph(nodes=g_nodes, edges=g_edges, config=config)
+        rendered = True
         if selected:
             n = next((x for x in nodes if str(x.id) == str(selected)), None)
             if n:
                 st.info(f"Selected {n.label} ({n.node_type})")
-    except Exception:
-        st.warning("Graph library unavailable, showing fallback table + adjacency list")
-        st.dataframe(pd.DataFrame([{"id": n.id, "label": n.label, "type": n.node_type, "ref_id": n.ref_id} for n in nodes]))
-        adj = []
-        label_map = {n.id: n.label for n in nodes}
-        for e in edges:
-            adj.append({"from": label_map.get(e.source_node_id), "to": label_map.get(e.target_node_id), "label": e.label})
-        st.dataframe(pd.DataFrame(adj))
+    except Exception as exc:
+        agraph_error = str(exc)
+
+    if not rendered:
+        try:
+            _render_pyvis(nodes, edges)
+            st.info("Rendered with PyVis fallback because streamlit-agraph is unavailable.")
+            rendered = True
+        except Exception as exc:
+            reason = agraph_error or str(exc)
+            _render_table_fallback(nodes, edges, reason=reason)
 
     with st.expander("Create account / pod / liability"):
         col1, col2, col3 = st.columns(3)

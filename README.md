@@ -8,7 +8,7 @@ FlowLedger is a personal-only money router MVP built as an original, dry-run-fir
 - Single-user Streamlit monolith (no auth)
 - Accounts, Pods (virtual buckets), Liabilities
 - Read-only CSV transaction import + manual balances
-- Money Map view (graph with table fallback)
+- Money Map view (streamlit-agraph, then PyVis fallback, then table fallback)
 - Deterministic rules engine: Trigger -> Conditions -> ordered Actions (stop-on-failure)
 - Simulator with trace over last N days (default 90)
 - Activity feed + audit export CSV
@@ -98,7 +98,8 @@ scheduler_tick():
 
 - **Money Map**
   - Graph canvas using `streamlit-agraph`
-  - Fallback: node table + adjacency list when graph lib fails
+  - Fallback #1: embedded PyVis interactive graph
+  - Fallback #2: node table + adjacency list
   - Quick create for account/pod/liability + map nodes
 - **Rule Builder**
   - Trigger selector (transaction/schedule/manual)
