@@ -1,0 +1,6 @@
+streamlit
+sqlalchemy
+pandas
+pydantic
+streamlit-agraph
+pytest
