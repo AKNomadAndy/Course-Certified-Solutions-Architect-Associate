@@ -37,10 +37,26 @@ def _render_pyvis(nodes, edges):
     components.html(html, height=540, scrolling=False)
 
 
+def _render_overview(nodes, edges):
+    st.subheader("Map Overview")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Nodes", len(nodes))
+    c2.metric("Edges", len(edges))
+    liabilities = sum(1 for n in nodes if n.node_type == "liability")
+    c3.metric("Liability Nodes", liabilities)
+
+    if nodes:
+        nd = pd.DataFrame([{"type": n.node_type} for n in nodes])
+        count_by_type = nd.groupby("type", as_index=False).size().rename(columns={"size": "count"})
+        st.bar_chart(count_by_type, x="type", y="count", color="#9775fa")
+
+
 def render(session):
     st.header("Money Map")
     nodes = session.scalars(select(models.MoneyMapNode)).all()
     edges = session.scalars(select(models.MoneyMapEdge)).all()
+
+    _render_overview(nodes, edges)
 
     if st.button("Create quick edge"):
         if len(nodes) >= 2:
