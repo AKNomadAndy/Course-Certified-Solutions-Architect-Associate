@@ -1,0 +1,67 @@
+date,description,amount,account,category,merchant,currency
+2025-11-14,Payroll Deposit,2200.0,Main Checking,Income,Payroll,USD
+2025-11-15,Coffee Spot Purchase,-13.15,Main Checking,Living,Coffee,USD
+2025-11-16,Utilities Purchase,-16.3,Main Checking,Living,Utilities,USD
+2025-11-17,Transit Purchase,-19.45,Main Checking,Living,Transit,USD
+2025-11-18,Payroll Purchase,-22.6,Main Checking,Living,Payroll,USD
+2025-11-19,Rent Purchase,-25.75,Main Checking,Living,Rent,USD
+2025-11-20,Grocer Purchase,-28.9,Main Checking,Living,Grocer,USD
+2025-11-21,Coffee Spot Purchase,-10.0,Main Checking,Living,Coffee,USD
+2025-11-22,Utilities Purchase,-13.15,Main Checking,Living,Utilities,USD
+2025-11-23,Transit Purchase,-16.3,Main Checking,Living,Transit,USD
+2025-11-24,Payroll Purchase,-19.45,Main Checking,Living,Payroll,USD
+2025-11-25,Rent Purchase,-22.6,Main Checking,Living,Rent,USD
+2025-11-26,Grocer Purchase,-25.75,Main Checking,Living,Grocer,USD
+2025-11-27,Coffee Spot Purchase,-28.9,Main Checking,Living,Coffee,USD
+2025-11-28,Payroll Deposit,2200.0,Main Checking,Income,Payroll,USD
+2025-11-29,Transit Purchase,-13.15,Main Checking,Living,Transit,USD
+2025-11-30,Payroll Purchase,-16.3,Main Checking,Living,Payroll,USD
+2025-12-01,Rent Purchase,-19.45,Main Checking,Living,Rent,USD
+2025-12-02,Grocer Purchase,-22.6,Main Checking,Living,Grocer,USD
+2025-12-03,Coffee Spot Purchase,-25.75,Main Checking,Living,Coffee,USD
+2025-12-04,Utilities Purchase,-28.9,Main Checking,Living,Utilities,USD
+2025-12-05,Transit Purchase,-10.0,Main Checking,Living,Transit,USD
+2025-12-06,Payroll Purchase,-13.15,Main Checking,Living,Payroll,USD
+2025-12-07,Rent Purchase,-16.3,Main Checking,Living,Rent,USD
+2025-12-08,Grocer Purchase,-19.45,Main Checking,Living,Grocer,USD
+2025-12-09,Coffee Spot Purchase,-22.6,Main Checking,Living,Coffee,USD
+2025-12-10,Utilities Purchase,-25.75,Main Checking,Living,Utilities,USD
+2025-12-11,Transit Purchase,-28.9,Main Checking,Living,Transit,USD
+2025-12-12,Payroll Deposit,2200.0,Main Checking,Income,Payroll,USD
+2025-12-13,Rent Purchase,-13.15,Main Checking,Living,Rent,USD
+2025-12-14,Rent Payment,-1200.0,Main Checking,Housing,Rent,USD
+2025-12-15,Coffee Spot Purchase,-19.45,Main Checking,Living,Coffee,USD
+2025-12-16,Utilities Purchase,-22.6,Main Checking,Living,Utilities,USD
+2025-12-17,Transit Purchase,-25.75,Main Checking,Living,Transit,USD
+2025-12-18,Payroll Purchase,-28.9,Main Checking,Living,Payroll,USD
+2025-12-19,Rent Purchase,-10.0,Main Checking,Living,Rent,USD
+2025-12-20,Grocer Purchase,-13.15,Main Checking,Living,Grocer,USD
+2025-12-21,Coffee Spot Purchase,-16.3,Main Checking,Living,Coffee,USD
+2025-12-22,Utilities Purchase,-19.45,Main Checking,Living,Utilities,USD
+2025-12-23,Transit Purchase,-22.6,Main Checking,Living,Transit,USD
+2025-12-24,Payroll Purchase,-25.75,Main Checking,Living,Payroll,USD
+2025-12-25,Rent Purchase,-28.9,Main Checking,Living,Rent,USD
+2025-12-26,Payroll Deposit,2200.0,Main Checking,Income,Payroll,USD
+2025-12-27,Coffee Spot Purchase,-13.15,Main Checking,Living,Coffee,USD
+2025-12-28,Utilities Purchase,-16.3,Main Checking,Living,Utilities,USD
+2025-12-29,Transit Purchase,-19.45,Main Checking,Living,Transit,USD
+2025-12-30,Payroll Purchase,-22.6,Main Checking,Living,Payroll,USD
+2025-12-31,Rent Purchase,-25.75,Main Checking,Living,Rent,USD
+2026-01-01,Grocer Purchase,-28.9,Main Checking,Living,Grocer,USD
+2026-01-02,Coffee Spot Purchase,-10.0,Main Checking,Living,Coffee,USD
+2026-01-03,Utilities Purchase,-13.15,Main Checking,Living,Utilities,USD
+2026-01-04,Transit Purchase,-16.3,Main Checking,Living,Transit,USD
+2026-01-05,Payroll Purchase,-19.45,Main Checking,Living,Payroll,USD
+2026-01-06,Rent Purchase,-22.6,Main Checking,Living,Rent,USD
+2026-01-07,Grocer Purchase,-25.75,Main Checking,Living,Grocer,USD
+2026-01-08,Coffee Spot Purchase,-28.9,Main Checking,Living,Coffee,USD
+2026-01-09,Payroll Deposit,2200.0,Main Checking,Income,Payroll,USD
+2026-01-10,Transit Purchase,-13.15,Main Checking,Living,Transit,USD
+2026-01-11,Payroll Purchase,-16.3,Main Checking,Living,Payroll,USD
+2026-01-12,Rent Purchase,-19.45,Main Checking,Living,Rent,USD
+2026-01-13,Rent Payment,-1200.0,Main Checking,Housing,Rent,USD
+2026-01-14,Coffee Spot Purchase,-25.75,Main Checking,Living,Coffee,USD
+2026-01-15,Utilities Purchase,-28.9,Main Checking,Living,Utilities,USD
+2026-01-16,Transit Purchase,-10.0,Main Checking,Living,Transit,USD
+2026-01-17,Payroll Purchase,-13.15,Main Checking,Living,Payroll,USD
+2026-01-18,Rent Purchase,-16.3,Main Checking,Living,Rent,USD
