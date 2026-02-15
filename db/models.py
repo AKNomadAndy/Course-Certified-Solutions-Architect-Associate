@@ -158,3 +158,24 @@ class Task(Base):
     reference_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     status: Mapped[str] = mapped_column(String(24), default="open")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class IncomeProfile(Base):
+    __tablename__ = "income_profiles"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, default="Primary Income")
+    monthly_amount: Mapped[float] = mapped_column(Float, default=0)
+    pay_frequency: Mapped[str] = mapped_column(String(20), default="monthly")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Bill(Base):
+    __tablename__ = "bills"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(160), unique=True)
+    amount: Mapped[float] = mapped_column(Float)
+    due_day: Mapped[int] = mapped_column(Integer)
+    category: Mapped[str] = mapped_column(String(80), default="General")
+    autopay: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

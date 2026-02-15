@@ -3,7 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from db.engine import SessionLocal, init_db
-from ui.pages import activity, map_view, rules, settings, simulate, tasks_view
+from ui.pages import activity, map_view, planner, rules, settings, simulate, tasks_view
 
 st.set_page_config(page_title="FlowLedger", layout="wide")
 
@@ -12,6 +12,7 @@ init_db()
 PAGES = {
     "Money Map": map_view.render,
     "Rule Builder": rules.render,
+    "Income & Bills": planner.render,
     "Simulator": simulate.render,
     "Activity": activity.render,
     "Next Actions": tasks_view.render,
