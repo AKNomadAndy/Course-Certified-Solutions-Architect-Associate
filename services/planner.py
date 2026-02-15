@@ -19,30 +19,70 @@ def get_or_create_income_profile(session):
     return profile
 
 
-def save_income_profile(session, monthly_amount: float, pay_frequency: str):
+def save_income_profile(session, monthly_amount: float, pay_frequency: str, next_pay_date=None, current_checking_balance: float = 0.0):
     profile = get_or_create_income_profile(session)
     profile.monthly_amount = float(monthly_amount)
     profile.pay_frequency = pay_frequency
+    profile.next_pay_date = next_pay_date
+    profile.current_checking_balance = float(current_checking_balance)
     session.commit()
+
+    # Save snapshot for forecasting and rules available-balance logic.
+    checking = session.scalar(select(models.Account).where(models.Account.type == "checking").order_by(models.Account.id))
+    if checking:
+        session.add(
+            models.BalanceSnapshot(
+                source_type="account",
+                source_id=checking.id,
+                balance=profile.current_checking_balance,
+            )
+        )
+        session.commit()
+
     return profile
 
 
-def add_bill(session, name: str, amount: float, due_day: int, category: str, autopay: bool):
+def add_bill(session, name: str, amount: float, due_day: int, category: str, autopay: bool, next_due_date=None):
     existing = session.scalar(select(models.Bill).where(models.Bill.name == name))
     if existing:
         existing.amount = float(amount)
         existing.due_day = int(due_day)
+        existing.next_due_date = next_due_date
         existing.category = category
         existing.autopay = autopay
         existing.is_active = True
         session.commit()
         return existing
 
-    bill = models.Bill(name=name, amount=float(amount), due_day=int(due_day), category=category, autopay=autopay)
+    bill = models.Bill(
+        name=name,
+        amount=float(amount),
+        due_day=int(due_day),
+        next_due_date=next_due_date,
+        category=category,
+        autopay=autopay,
+    )
     session.add(bill)
     session.commit()
     session.refresh(bill)
     return bill
+
+
+def mark_bill_paid(session, bill_id: int, paid_on: date):
+    bill = session.get(models.Bill, bill_id)
+    if not bill:
+        return None
+    bill.is_paid = True
+    bill.last_paid_date = paid_on
+    session.commit()
+    return bill
+
+
+def reset_bill_paid_flags(session):
+    bills = session.scalars(select(models.Bill).where(models.Bill.is_active == True)).all()  # noqa: E712
+    for b in bills:
+        b.is_paid = False
+    session.commit()
 
 
 def list_bills(session):
@@ -59,11 +99,15 @@ def monthly_plan_summary(session):
     bills_df = pd.DataFrame(
         [
             {
+                "id": b.id,
                 "bill": b.name,
                 "amount": b.amount,
                 "due_day": b.due_day,
+                "next_due_date": b.next_due_date,
                 "category": b.category,
                 "autopay": b.autopay,
+                "is_paid": b.is_paid,
+                "last_paid_date": b.last_paid_date,
             }
             for b in bills
         ]
@@ -71,6 +115,8 @@ def monthly_plan_summary(session):
 
     return {
         "income": profile.monthly_amount,
+        "next_pay_date": profile.next_pay_date,
+        "checking_balance": profile.current_checking_balance,
         "total_bills": round(total_bills, 2),
         "remaining": round(remaining, 2),
         "autopay_total": round(autopay_total, 2),
@@ -85,7 +131,7 @@ def generate_monthly_bill_tasks(session):
     created = 0
 
     for bill in list_bills(session):
-        due = date(year, month, min(max(1, bill.due_day), max_day))
+        due = bill.next_due_date or date(year, month, min(max(1, bill.due_day), max_day))
         ref = f"bill:{bill.id}:{year}-{month:02d}"
         exists = session.scalar(select(models.Task).where(models.Task.reference_id == ref))
         if exists:

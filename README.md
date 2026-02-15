@@ -103,16 +103,18 @@ scheduler_tick():
   - Fallback #2: built-in SVG graph (no extra deps)
   - Fallback #3: node table + adjacency list
   - Quick create for account/pod/liability + map nodes
-  - Pod rename editor inside Money Map
+  - Edit accounts, pods, liabilities in-place (including Main Checking rename)
 - **Income & Bills**
   - Enter monthly income and pay frequency
-  - Add recurring bills with due date, category, autopay
+  - Add recurring bills with calendar due dates, category, autopay
+  - Mark bills paid with one click and reset paid flags
+  - Set next pay date + current checking amount
   - Visualize due-day load + category mix + remaining cash
   - Generate current-month bill tasks
 - **Rule Builder**
   - Trigger selector (transaction/schedule/manual)
   - JSON-based condition/action wizard for MVP speed
-  - Buttons: Simulate, Enable/Disable, Save draft
+  - Clean editor with create/update/delete + enabled toggle + simulate latest transaction
 - **Simulator**
   - Rule picker + lookback days (default 90)
   - Step trace and summary (allocations/tasks/warnings)

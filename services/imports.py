@@ -16,7 +16,6 @@ ALT_COLUMN_MAP = {
     "trans_dat": "date",
     "post_date": "posted_date",
     "amount_usd": "amount",
-    "card_last4": "account",
     "section": "category",
     "foreign_currency": "currency",
 }
@@ -67,14 +66,14 @@ def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
     df["description"] = df["description"].astype(str).str.strip()
 
-    # Fill richer values from alternate columns when present.
-    if "card_last4" in cols:
-        card_series = df["account"] if "account" in df.columns else None
-        if card_series is not None:
-            formatted = card_series.apply(lambda x: f"Card {str(x).strip()}" if pd.notna(x) and str(x).strip() else None)
-            df["account"] = df["account"].apply(lambda x: f"Card {str(x).strip()}" if pd.notna(x) and str(x).strip() else None)
-            df["account"] = df["account"].fillna(formatted)
-    if "foreign_currency" in cols and "foreign_currency" in df.columns:
+        # Fill richer values from alternate columns when present.
+    if "card_last4" in df.columns:
+        card_series = df["card_last4"].astype(str).str.strip()
+        formatted = card_series.apply(lambda x: f"Card {x}" if x and x.lower() != "nan" else None)
+        if "account" not in df.columns:
+            df["account"] = None
+        df["account"] = df["account"].where(df["account"].notna(), formatted)
+    if "foreign_currency" in df.columns:
         df["currency"] = df["currency"].fillna(df["foreign_currency"])
 
     # Drop invalid rows.

@@ -166,6 +166,8 @@ class IncomeProfile(Base):
     name: Mapped[str] = mapped_column(String(120), unique=True, default="Primary Income")
     monthly_amount: Mapped[float] = mapped_column(Float, default=0)
     pay_frequency: Mapped[str] = mapped_column(String(20), default="monthly")
+    next_pay_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    current_checking_balance: Mapped[float] = mapped_column(Float, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -175,7 +177,10 @@ class Bill(Base):
     name: Mapped[str] = mapped_column(String(160), unique=True)
     amount: Mapped[float] = mapped_column(Float)
     due_day: Mapped[int] = mapped_column(Integer)
+    next_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     category: Mapped[str] = mapped_column(String(80), default="General")
     autopay: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_paid: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_paid_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

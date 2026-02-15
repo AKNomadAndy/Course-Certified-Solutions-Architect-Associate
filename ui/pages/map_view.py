@@ -168,23 +168,69 @@ def _render_overview(nodes, edges):
         col_b.bar_chart(edge_df, x="label", y="count", color="#9775fa")
 
 
-def _rename_pod(session):
+def _edit_accounts(session):
+    accounts = session.scalars(select(models.Account).order_by(models.Account.name)).all()
+    if not accounts:
+        st.info("No accounts yet.")
+        return
+    picked = st.selectbox("Account", accounts, format_func=lambda a: a.name, key="edit_account_pick")
+    new_name = st.text_input("Account name", value=picked.name, key="edit_account_name")
+    new_type = st.selectbox("Account type", ["checking", "savings", "cash", "credit", "loan"], index=["checking", "savings", "cash", "credit", "loan"].index(picked.type), key="edit_account_type")
+    new_currency = st.text_input("Currency", value=picked.currency or "USD", key="edit_account_currency")
+    if st.button("Save Account", key="save_account"):
+        picked.name = new_name.strip()
+        picked.type = new_type
+        picked.currency = new_currency.strip() or "USD"
+        node = session.scalar(select(models.MoneyMapNode).where(models.MoneyMapNode.node_type == "account", models.MoneyMapNode.ref_id == picked.id))
+        if node:
+            node.label = picked.name
+        session.commit()
+        st.success("Account updated")
+
+
+def _edit_pods(session):
     pods = session.scalars(select(models.Pod).order_by(models.Pod.name)).all()
     if not pods:
-        st.info("No pods to edit yet.")
+        st.info("No pods yet.")
         return
-
-    selected = st.selectbox("Select pod to rename", pods, format_func=lambda p: p.name)
-    new_name = st.text_input("New pod name")
-    if st.button("Rename Pod") and new_name.strip():
-        old = selected.name
-        selected.name = new_name.strip()
-        node = session.scalar(select(models.MoneyMapNode).where(models.MoneyMapNode.node_type == "pod", models.MoneyMapNode.ref_id == selected.id))
+    picked = st.selectbox("Pod", pods, format_func=lambda p: p.name, key="edit_pod_pick")
+    new_name = st.text_input("Pod name", value=picked.name, key="edit_pod_name")
+    target = st.number_input("Target balance", value=float(picked.target_balance or 0), key="edit_pod_target")
+    current = st.number_input("Current balance", value=float(picked.current_balance or 0), key="edit_pod_current")
+    if st.button("Save Pod", key="save_pod"):
+        old = picked.name
+        picked.name = new_name.strip()
+        picked.target_balance = float(target)
+        picked.current_balance = float(current)
+        node = session.scalar(select(models.MoneyMapNode).where(models.MoneyMapNode.node_type == "pod", models.MoneyMapNode.ref_id == picked.id))
         if node:
-            node.label = selected.name
+            node.label = picked.name
         session.commit()
-        st.success(f"Renamed pod: {old} -> {selected.name}")
+        st.success(f"Pod updated: {old} -> {picked.name}")
 
+
+def _edit_liabilities(session):
+    items = session.scalars(select(models.Liability).order_by(models.Liability.name)).all()
+    if not items:
+        st.info("No liabilities yet.")
+        return
+    picked = st.selectbox("Liability", items, format_func=lambda l: l.name, key="edit_liability_pick")
+    name = st.text_input("Liability name", value=picked.name, key="edit_liability_name")
+    min_due = st.number_input("Min due", value=float(picked.min_due or 0), key="edit_liability_min_due")
+    statement = st.number_input("Statement balance", value=float(picked.statement_balance or 0), key="edit_liability_statement")
+    due = st.date_input("Due date", value=picked.due_date, key="edit_liability_due")
+    apr = st.number_input("APR", value=float(picked.apr or 0), key="edit_liability_apr")
+    if st.button("Save Liability", key="save_liability"):
+        picked.name = name.strip()
+        picked.min_due = float(min_due)
+        picked.statement_balance = float(statement)
+        picked.due_date = due
+        picked.apr = float(apr) if apr else None
+        node = session.scalar(select(models.MoneyMapNode).where(models.MoneyMapNode.node_type == "liability", models.MoneyMapNode.ref_id == picked.id))
+        if node:
+            node.label = picked.name
+        session.commit()
+        st.success("Liability updated")
 
 def render(session):
     st.header("Money Map")
@@ -235,8 +281,9 @@ def render(session):
             _render_table_fallback(nodes, edges, reason="\n".join(errors))
 
     with st.expander("Create / Edit map entities"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
+        create_col, edit_col = st.columns([1, 2])
+        with create_col:
+            st.markdown("**Create**")
             an = st.text_input("Account name")
             at = st.selectbox("Account type", ["checking", "savings", "cash", "credit", "loan"])
             if st.button("Add Account") and an:
@@ -246,7 +293,7 @@ def render(session):
                 session.add(models.MoneyMapNode(node_type="account", ref_id=account.id, label=account.name))
                 session.commit()
                 st.success("Added account")
-        with col2:
+
             pn = st.text_input("Pod name")
             if st.button("Add Pod") and pn:
                 pod = models.Pod(name=pn)
@@ -256,10 +303,6 @@ def render(session):
                 session.commit()
                 st.success("Added pod")
 
-            st.divider()
-            _rename_pod(session)
-
-        with col3:
             ln = st.text_input("Liability name")
             md = st.number_input("Min due", min_value=0.0, step=1.0)
             if st.button("Add Liability") and ln:
@@ -269,3 +312,13 @@ def render(session):
                 session.add(models.MoneyMapNode(node_type="liability", ref_id=li.id, label=li.name))
                 session.commit()
                 st.success("Added liability")
+
+        with edit_col:
+            st.markdown("**Edit Existing**")
+            t1, t2, t3 = st.tabs(["Accounts", "Pods", "Liabilities"])
+            with t1:
+                _edit_accounts(session)
+            with t2:
+                _edit_pods(session)
+            with t3:
+                _edit_liabilities(session)

@@ -30,13 +30,31 @@ def render(session):
         c2.metric("Completed", int((df["status"] == "completed").sum()))
         c3.metric("Failures", int((df["status"].isin(["action_failed", "condition_failed"])).sum()))
 
-        st.subheader("Run Volume Over Time")
-        timeline = df.set_index("created_at").resample("D").size().rename("runs").to_frame()
-        st.area_chart(timeline)
-
-        st.subheader("Status Mix")
+        st.subheader("Run Volume & Status")
+        timeline = df.set_index("created_at").resample("D").size().rename("runs").reset_index()
         mix = df.groupby("status", as_index=False).size().rename(columns={"size": "count"})
-        st.bar_chart(mix, x="status", y="count", color="#4dabf7")
+
+        a, b = st.columns(2)
+        try:
+            import altair as alt
+
+            line = (
+                alt.Chart(timeline)
+                .mark_area(line={"color": "#69db7c"}, color="#69db7c33")
+                .encode(x="created_at:T", y="runs:Q", tooltip=["created_at:T", "runs:Q"])
+                .properties(height=280, title="Run Volume Over Time")
+            )
+            bars = (
+                alt.Chart(mix)
+                .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+                .encode(x="status:N", y="count:Q", color=alt.value("#4dabf7"), tooltip=["status", "count"])
+                .properties(height=280, title="Status Mix")
+            )
+            a.altair_chart(line, use_container_width=True)
+            b.altair_chart(bars, use_container_width=True)
+        except Exception:
+            a.area_chart(timeline.set_index("created_at")["runs"])
+            b.bar_chart(mix, x="status", y="count", color="#4dabf7")
 
         st.subheader("Run Timeline")
         st.dataframe(df, use_container_width=True)
