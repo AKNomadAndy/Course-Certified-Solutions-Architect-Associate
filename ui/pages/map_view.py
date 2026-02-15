@@ -173,11 +173,15 @@ def _edit_accounts(session):
     if not accounts:
         st.info("No accounts yet.")
         return
-    picked = st.selectbox("Account", accounts, format_func=lambda a: a.name, key="edit_account_pick")
+    account_options = {f"{a.name} (#{a.id})": a.id for a in accounts}
+    selected_label = st.selectbox("Account", list(account_options.keys()), key="edit_account_pick")
+    picked_id = account_options[selected_label]
+    picked = session.get(models.Account, picked_id)
     new_name = st.text_input("Account name", value=picked.name, key="edit_account_name")
     new_type = st.selectbox("Account type", ["checking", "savings", "cash", "credit", "loan"], index=["checking", "savings", "cash", "credit", "loan"].index(picked.type), key="edit_account_type")
     new_currency = st.text_input("Currency", value=picked.currency or "USD", key="edit_account_currency")
     if st.button("Save Account", key="save_account"):
+        picked = session.get(models.Account, picked_id)
         picked.name = new_name.strip()
         picked.type = new_type
         picked.currency = new_currency.strip() or "USD"
@@ -187,6 +191,10 @@ def _edit_accounts(session):
         session.commit()
         st.success("Account updated")
     if st.button("Delete Account", key="delete_account"):
+        picked = session.get(models.Account, picked_id)
+        if not picked:
+            st.warning("Account already deleted.")
+            return
         session.query(models.BalanceSnapshot).filter(models.BalanceSnapshot.source_type == "account", models.BalanceSnapshot.source_id == picked.id).delete()
         node = session.scalar(select(models.MoneyMapNode).where(models.MoneyMapNode.node_type == "account", models.MoneyMapNode.ref_id == picked.id))
         if node:
@@ -202,11 +210,15 @@ def _edit_pods(session):
     if not pods:
         st.info("No pods yet.")
         return
-    picked = st.selectbox("Pod", pods, format_func=lambda p: p.name, key="edit_pod_pick")
+    pod_options = {f"{p.name} (#{p.id})": p.id for p in pods}
+    selected_label = st.selectbox("Pod", list(pod_options.keys()), key="edit_pod_pick")
+    picked_id = pod_options[selected_label]
+    picked = session.get(models.Pod, picked_id)
     new_name = st.text_input("Pod name", value=picked.name, key="edit_pod_name")
     target = st.number_input("Target balance", value=float(picked.target_balance or 0), key="edit_pod_target")
     current = st.number_input("Current balance", value=float(picked.current_balance or 0), key="edit_pod_current")
     if st.button("Save Pod", key="save_pod"):
+        picked = session.get(models.Pod, picked_id)
         old = picked.name
         picked.name = new_name.strip()
         picked.target_balance = float(target)
@@ -217,6 +229,10 @@ def _edit_pods(session):
         session.commit()
         st.success(f"Pod updated: {old} -> {picked.name}")
     if st.button("Delete Pod", key="delete_pod"):
+        picked = session.get(models.Pod, picked_id)
+        if not picked:
+            st.warning("Pod already deleted.")
+            return
         node = session.scalar(select(models.MoneyMapNode).where(models.MoneyMapNode.node_type == "pod", models.MoneyMapNode.ref_id == picked.id))
         if node:
             session.query(models.MoneyMapEdge).filter((models.MoneyMapEdge.source_node_id == node.id) | (models.MoneyMapEdge.target_node_id == node.id)).delete()
@@ -231,13 +247,17 @@ def _edit_liabilities(session):
     if not items:
         st.info("No liabilities yet.")
         return
-    picked = st.selectbox("Liability", items, format_func=lambda l: l.name, key="edit_liability_pick")
+    liability_options = {f"{l.name} (#{l.id})": l.id for l in items}
+    selected_label = st.selectbox("Liability", list(liability_options.keys()), key="edit_liability_pick")
+    picked_id = liability_options[selected_label]
+    picked = session.get(models.Liability, picked_id)
     name = st.text_input("Liability name", value=picked.name, key="edit_liability_name")
     min_due = st.number_input("Min due", value=float(picked.min_due or 0), key="edit_liability_min_due")
     statement = st.number_input("Statement balance", value=float(picked.statement_balance or 0), key="edit_liability_statement")
     due = st.date_input("Due date", value=picked.due_date, key="edit_liability_due")
     apr = st.number_input("APR", value=float(picked.apr or 0), key="edit_liability_apr")
     if st.button("Save Liability", key="save_liability"):
+        picked = session.get(models.Liability, picked_id)
         picked.name = name.strip()
         picked.min_due = float(min_due)
         picked.statement_balance = float(statement)
@@ -249,6 +269,10 @@ def _edit_liabilities(session):
         session.commit()
         st.success("Liability updated")
     if st.button("Delete Liability", key="delete_liability"):
+        picked = session.get(models.Liability, picked_id)
+        if not picked:
+            st.warning("Liability already deleted.")
+            return
         node = session.scalar(select(models.MoneyMapNode).where(models.MoneyMapNode.node_type == "liability", models.MoneyMapNode.ref_id == picked.id))
         if node:
             session.query(models.MoneyMapEdge).filter((models.MoneyMapEdge.source_node_id == node.id) | (models.MoneyMapEdge.target_node_id == node.id)).delete()
