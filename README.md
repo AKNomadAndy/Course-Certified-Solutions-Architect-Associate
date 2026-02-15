@@ -103,6 +103,7 @@ scheduler_tick():
   - Fallback #2: built-in SVG graph (no extra deps)
   - Fallback #3: node table + adjacency list
   - Quick create for account/pod/liability + map nodes
+  - Pod rename editor inside Money Map
 - **Income & Bills**
   - Enter monthly income and pay frequency
   - Add recurring bills with due date, category, autopay

@@ -69,9 +69,13 @@ def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     # Fill richer values from alternate columns when present.
     if "card_last4" in cols:
-        df["account"] = df["account"].fillna(df.get("card_last4").apply(lambda x: f"Card {x}" if pd.notna(x) else None))
-    if "foreign_currency" in cols:
-        df["currency"] = df["currency"].fillna(df.get("foreign_currency"))
+        card_series = df["account"] if "account" in df.columns else None
+        if card_series is not None:
+            formatted = card_series.apply(lambda x: f"Card {str(x).strip()}" if pd.notna(x) and str(x).strip() else None)
+            df["account"] = df["account"].apply(lambda x: f"Card {str(x).strip()}" if pd.notna(x) and str(x).strip() else None)
+            df["account"] = df["account"].fillna(formatted)
+    if "foreign_currency" in cols and "foreign_currency" in df.columns:
+        df["currency"] = df["currency"].fillna(df["foreign_currency"])
 
     # Drop invalid rows.
     df = df[df["date"].notna() & df["amount"].notna() & (df["description"] != "")]

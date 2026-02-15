@@ -13,6 +13,9 @@ from sqlalchemy import select
 from db import models
 
 
+PALETTE = {"account": "#4dabf7", "pod": "#69db7c", "liability": "#ff8787"}
+
+
 def _render_table_fallback(nodes, edges, reason: str):
     st.warning(f"Interactive graph unavailable. Showing table + adjacency list.\n{reason}")
     st.caption("Install optional graph deps to enable richer graph views: `pip install streamlit-agraph pyvis`")
@@ -25,11 +28,10 @@ def _render_table_fallback(nodes, edges, reason: str):
 def _render_pyvis(nodes, edges):
     from pyvis.network import Network
 
-    net = Network(height="520px", width="100%", directed=True)
-    palette = {"account": "#4dabf7", "pod": "#69db7c", "liability": "#ff8787"}
+    net = Network(height="520px", width="100%", directed=True, bgcolor="#0e1117", font_color="#e6edf3")
 
     for n in nodes:
-        net.add_node(str(n.id), label=n.label, color=palette.get(n.node_type, "#adb5bd"), title=n.node_type)
+        net.add_node(str(n.id), label=n.label, color=PALETTE.get(n.node_type, "#adb5bd"), title=n.node_type)
     for e in edges:
         net.add_edge(str(e.source_node_id), str(e.target_node_id), label=e.label)
 
@@ -40,26 +42,26 @@ def _render_pyvis(nodes, edges):
 
 
 def _render_native_svg_graph(nodes, edges):
-    # Zero-dependency fallback graph (interactive hover + labels) using inline SVG.
     if not nodes:
         st.info("No nodes yet. Add accounts/pods/liabilities to build your map.")
         return
 
-    palette = {"account": "#4dabf7", "pod": "#69db7c", "liability": "#ff8787"}
     cx, cy, radius = 500, 260, 180
     positioned = []
     for idx, n in enumerate(nodes):
         ang = 2 * math.pi * idx / max(len(nodes), 1)
         x = cx + radius * math.cos(ang)
         y = cy + radius * math.sin(ang)
-        positioned.append({
-            "id": n.id,
-            "label": n.label,
-            "node_type": n.node_type,
-            "x": round(x, 1),
-            "y": round(y, 1),
-            "color": palette.get(n.node_type, "#adb5bd"),
-        })
+        positioned.append(
+            {
+                "id": n.id,
+                "label": n.label,
+                "node_type": n.node_type,
+                "x": round(x, 1),
+                "y": round(y, 1),
+                "color": PALETTE.get(n.node_type, "#adb5bd"),
+            }
+        )
 
     html = f"""
     <div style='background:#0e1117;border:1px solid #1f2430;border-radius:10px;padding:8px;'>
@@ -92,13 +94,6 @@ def _render_native_svg_graph(nodes, edges):
         line.setAttribute('x2', t.x); line.setAttribute('y2', t.y);
         line.setAttribute('class', 'edge');
         edgeRoot.appendChild(line);
-
-        const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        tx.setAttribute('x', (s.x + t.x) / 2 + 6);
-        tx.setAttribute('y', (s.y + t.y) / 2 - 6);
-        tx.setAttribute('class', 'edge-label');
-        tx.textContent = e.label || '';
-        edgeRoot.appendChild(tx);
       }});
 
       nodes.forEach(n => {{
@@ -129,10 +124,66 @@ def _render_overview(nodes, edges):
     liabilities = sum(1 for n in nodes if n.node_type == "liability")
     c3.metric("Liability Nodes", liabilities)
 
-    if nodes:
-        nd = pd.DataFrame([{"type": n.node_type} for n in nodes])
-        count_by_type = nd.groupby("type", as_index=False).size().rename(columns={"size": "count"})
-        st.bar_chart(count_by_type, x="type", y="count", color="#9775fa")
+    if not nodes:
+        return
+
+    node_df = pd.DataFrame([{"type": n.node_type} for n in nodes])
+    by_type = node_df.groupby("type", as_index=False).size().rename(columns={"size": "count"})
+
+    edge_df = pd.DataFrame([{"label": e.label or "route"} for e in edges])
+    if edge_df.empty:
+        edge_df = pd.DataFrame([{"label": "route", "count": 0}])
+    else:
+        edge_df = edge_df.groupby("label", as_index=False).size().rename(columns={"size": "count"})
+
+    col_a, col_b = st.columns(2)
+    try:
+        import altair as alt
+
+        donut = (
+            alt.Chart(by_type)
+            .mark_arc(innerRadius=60)
+            .encode(
+                theta=alt.Theta(field="count", type="quantitative"),
+                color=alt.Color(field="type", type="nominal", scale=alt.Scale(range=["#4dabf7", "#69db7c", "#ff8787"])),
+                tooltip=["type", "count"],
+            )
+            .properties(height=300, title="Node Type Distribution")
+        )
+        bars = (
+            alt.Chart(edge_df)
+            .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+            .encode(
+                x=alt.X("label:N", sort="-y", title="Edge Label"),
+                y=alt.Y("count:Q", title="Count"),
+                color=alt.value("#9775fa"),
+                tooltip=["label", "count"],
+            )
+            .properties(height=300, title="Route Label Mix")
+        )
+        col_a.altair_chart(donut, use_container_width=True)
+        col_b.altair_chart(bars, use_container_width=True)
+    except Exception:
+        col_a.bar_chart(by_type, x="type", y="count", color="#69db7c")
+        col_b.bar_chart(edge_df, x="label", y="count", color="#9775fa")
+
+
+def _rename_pod(session):
+    pods = session.scalars(select(models.Pod).order_by(models.Pod.name)).all()
+    if not pods:
+        st.info("No pods to edit yet.")
+        return
+
+    selected = st.selectbox("Select pod to rename", pods, format_func=lambda p: p.name)
+    new_name = st.text_input("New pod name")
+    if st.button("Rename Pod") and new_name.strip():
+        old = selected.name
+        selected.name = new_name.strip()
+        node = session.scalar(select(models.MoneyMapNode).where(models.MoneyMapNode.node_type == "pod", models.MoneyMapNode.ref_id == selected.id))
+        if node:
+            node.label = selected.name
+        session.commit()
+        st.success(f"Renamed pod: {old} -> {selected.name}")
 
 
 def render(session):
@@ -154,7 +205,7 @@ def render(session):
     try:
         from streamlit_agraph import Config, Edge, Node, agraph
 
-        g_nodes = [Node(id=str(n.id), label=n.label, size=20) for n in nodes]
+        g_nodes = [Node(id=str(n.id), label=n.label, size=20, color=PALETTE.get(n.node_type, "#adb5bd")) for n in nodes]
         g_edges = [Edge(source=str(e.source_node_id), target=str(e.target_node_id), label=e.label) for e in edges]
         config = Config(width="100%", height=520, directed=True, physics=True)
         selected = agraph(nodes=g_nodes, edges=g_edges, config=config)
@@ -183,7 +234,7 @@ def render(session):
             errors.append(f"native svg fallback failed: {exc}")
             _render_table_fallback(nodes, edges, reason="\n".join(errors))
 
-    with st.expander("Create account / pod / liability"):
+    with st.expander("Create / Edit map entities"):
         col1, col2, col3 = st.columns(3)
         with col1:
             an = st.text_input("Account name")
@@ -204,6 +255,10 @@ def render(session):
                 session.add(models.MoneyMapNode(node_type="pod", ref_id=pod.id, label=pod.name))
                 session.commit()
                 st.success("Added pod")
+
+            st.divider()
+            _rename_pod(session)
+
         with col3:
             ln = st.text_input("Liability name")
             md = st.number_input("Min due", min_value=0.0, step=1.0)
