@@ -6,6 +6,7 @@ import streamlit as st
 
 from services.planner import (
     add_bill,
+    build_debt_payment_plan,
     generate_monthly_bill_tasks,
     get_or_create_income_profile,
     list_bills,
@@ -18,13 +19,13 @@ from services.planner import (
 
 def render(session):
     st.header("Income & Bills Planner")
-    st.caption("Simple cash plan: set pay dates, bill due dates, and track paid status.")
+    st.caption("Simple cash plan: recurring income/bills, payment calendar, and debt payoff guidance.")
 
     profile = get_or_create_income_profile(session)
 
     with st.container(border=True):
         st.subheader("Income Setup")
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         monthly_income = c1.number_input("Monthly income", min_value=0.0, value=float(profile.monthly_amount), step=100.0)
         pay_frequency = c2.selectbox(
             "Pay frequency",
@@ -32,6 +33,7 @@ def render(session):
             index=["weekly", "biweekly", "monthly"].index(profile.pay_frequency if profile.pay_frequency in ["weekly", "biweekly", "monthly"] else "monthly"),
         )
         pay_date = c3.date_input("Next pay date", value=profile.next_pay_date or date.today())
+        income_recurring = c4.checkbox("Recurring income", value=bool(getattr(profile, "is_recurring", True)))
 
         checking_balance = st.number_input(
             "Current checking balance",
@@ -41,20 +43,21 @@ def render(session):
         )
 
         if st.button("Save Income", type="primary"):
-            save_income_profile(session, monthly_income, pay_frequency, pay_date, checking_balance)
+            save_income_profile(session, monthly_income, pay_frequency, pay_date, checking_balance, is_recurring=income_recurring)
             st.success("Income and checking balance updated")
 
     with st.container(border=True):
         st.subheader("Add / Update Bill")
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         name = c1.text_input("Bill name")
         amount = c2.number_input("Amount", min_value=0.0, step=1.0)
         due_date = c3.date_input("Due date", value=date.today())
-        c4, c5 = st.columns(2)
-        category = c4.text_input("Category", value="Utilities")
-        autopay = c5.checkbox("Autopay")
+        recurring = c4.checkbox("Recurring bill", value=True)
+        c5, c6 = st.columns(2)
+        category = c5.text_input("Category", value="Utilities")
+        autopay = c6.checkbox("Autopay")
         if st.button("Save Bill") and name:
-            add_bill(session, name, amount, due_date.day, category, autopay, next_due_date=due_date)
+            add_bill(session, name, amount, due_date.day, category, autopay, next_due_date=due_date, is_recurring=recurring)
             st.success("Bill saved")
 
     summary = monthly_plan_summary(session)
@@ -95,7 +98,8 @@ def render(session):
             with st.container(border=True):
                 l, r = st.columns([4, 1])
                 paid_badge = "✅ Paid" if bill.is_paid else "🕒 Open"
-                l.write(f"**{bill.name}** · ${bill.amount:.2f} · due {bill.next_due_date or f'day {bill.due_day}'} · {paid_badge}")
+                recur_badge = "🔁 recurring" if bill.is_recurring else "one-time"
+                l.write(f"**{bill.name}** · ${bill.amount:.2f} · due {bill.next_due_date or f'day {bill.due_day}'} · {recur_badge} · {paid_badge}")
                 if not bill.is_paid and r.button("Mark Paid", key=f"paid_{bill.id}"):
                     mark_bill_paid(session, bill.id, date.today())
                     st.success(f"Marked {bill.name} paid")
@@ -106,6 +110,19 @@ def render(session):
         st.dataframe(bills_df.sort_values(["is_paid", "due_day", "bill"]), use_container_width=True)
     else:
         st.info("No bills yet. Add bills to unlock automation and projections.")
+
+    st.subheader("Debt Reduction Plan")
+    extra = st.number_input("Extra monthly payment toward debt", min_value=0.0, step=10.0, value=max(0.0, summary["remaining"]))
+    if st.button("Generate Debt Plan"):
+        plan = build_debt_payment_plan(session, monthly_extra_payment=extra)
+        if plan.empty:
+            st.info("No liabilities found. Add liabilities in Money Map.")
+        else:
+            st.dataframe(plan, use_container_width=True)
+            target = plan.iloc[0]
+            st.success(
+                f"Plan: pay minimums on all debts and target extra payment to **{target['liability']}** (APR {target['apr']:.2f}%)."
+            )
 
     cta1, cta2 = st.columns(2)
     if cta1.button("Generate This Month's Bill Tasks"):

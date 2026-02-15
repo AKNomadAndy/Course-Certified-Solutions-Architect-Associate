@@ -12,22 +12,29 @@ from db import models
 def get_or_create_income_profile(session):
     profile = session.scalar(select(models.IncomeProfile).where(models.IncomeProfile.name == "Primary Income"))
     if not profile:
-        profile = models.IncomeProfile(name="Primary Income", monthly_amount=0, pay_frequency="monthly")
+        profile = models.IncomeProfile(name="Primary Income", monthly_amount=0, pay_frequency="monthly", is_recurring=True)
         session.add(profile)
         session.commit()
         session.refresh(profile)
     return profile
 
 
-def save_income_profile(session, monthly_amount: float, pay_frequency: str, next_pay_date=None, current_checking_balance: float = 0.0):
+def save_income_profile(
+    session,
+    monthly_amount: float,
+    pay_frequency: str,
+    next_pay_date=None,
+    current_checking_balance: float = 0.0,
+    is_recurring: bool = True,
+):
     profile = get_or_create_income_profile(session)
     profile.monthly_amount = float(monthly_amount)
     profile.pay_frequency = pay_frequency
     profile.next_pay_date = next_pay_date
     profile.current_checking_balance = float(current_checking_balance)
+    profile.is_recurring = is_recurring
     session.commit()
 
-    # Save snapshot for forecasting and rules available-balance logic.
     checking = session.scalar(select(models.Account).where(models.Account.type == "checking").order_by(models.Account.id))
     if checking:
         session.add(
@@ -42,7 +49,7 @@ def save_income_profile(session, monthly_amount: float, pay_frequency: str, next
     return profile
 
 
-def add_bill(session, name: str, amount: float, due_day: int, category: str, autopay: bool, next_due_date=None):
+def add_bill(session, name: str, amount: float, due_day: int, category: str, autopay: bool, next_due_date=None, is_recurring: bool = True):
     existing = session.scalar(select(models.Bill).where(models.Bill.name == name))
     if existing:
         existing.amount = float(amount)
@@ -50,6 +57,7 @@ def add_bill(session, name: str, amount: float, due_day: int, category: str, aut
         existing.next_due_date = next_due_date
         existing.category = category
         existing.autopay = autopay
+        existing.is_recurring = is_recurring
         existing.is_active = True
         session.commit()
         return existing
@@ -61,6 +69,7 @@ def add_bill(session, name: str, amount: float, due_day: int, category: str, aut
         next_due_date=next_due_date,
         category=category,
         autopay=autopay,
+        is_recurring=is_recurring,
     )
     session.add(bill)
     session.commit()
@@ -106,6 +115,7 @@ def monthly_plan_summary(session):
                 "next_due_date": b.next_due_date,
                 "category": b.category,
                 "autopay": b.autopay,
+                "is_recurring": b.is_recurring,
                 "is_paid": b.is_paid,
                 "last_paid_date": b.last_paid_date,
             }
@@ -115,6 +125,7 @@ def monthly_plan_summary(session):
 
     return {
         "income": profile.monthly_amount,
+        "income_recurring": profile.is_recurring,
         "next_pay_date": profile.next_pay_date,
         "checking_balance": profile.current_checking_balance,
         "total_bills": round(total_bills, 2),
@@ -131,6 +142,8 @@ def generate_monthly_bill_tasks(session):
     created = 0
 
     for bill in list_bills(session):
+        if not bill.is_recurring:
+            continue
         due = bill.next_due_date or date(year, month, min(max(1, bill.due_day), max_day))
         ref = f"bill:{bill.id}:{year}-{month:02d}"
         exists = session.scalar(select(models.Task).where(models.Task.reference_id == ref))
@@ -149,3 +162,32 @@ def generate_monthly_bill_tasks(session):
 
     session.commit()
     return created
+
+
+def build_debt_payment_plan(session, monthly_extra_payment: float = 0.0):
+    liabilities = session.scalars(select(models.Liability).order_by(models.Liability.apr.desc().nullslast(), models.Liability.statement_balance.desc())).all()
+    if not liabilities:
+        return pd.DataFrame(columns=["liability", "statement_balance", "min_due", "apr", "suggested_payment", "strategy"])
+
+    rows = []
+    extra_pool = max(0.0, monthly_extra_payment)
+    for idx, debt in enumerate(liabilities):
+        min_due = float(debt.min_due or 0.0)
+        suggested = min_due
+        strategy = "minimum"
+        if idx == 0 and extra_pool > 0:
+            suggested += extra_pool
+            strategy = "avalanche_target"
+
+        rows.append(
+            {
+                "liability": debt.name,
+                "statement_balance": float(debt.statement_balance or 0.0),
+                "min_due": min_due,
+                "apr": float(debt.apr or 0.0),
+                "suggested_payment": round(suggested, 2),
+                "strategy": strategy,
+            }
+        )
+
+    return pd.DataFrame(rows)

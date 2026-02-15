@@ -22,8 +22,10 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
 
     # Lightweight schema evolution for existing local DBs.
+    _ensure_column("income_profiles", "is_recurring", "is_recurring BOOLEAN DEFAULT 1")
     _ensure_column("income_profiles", "next_pay_date", "next_pay_date DATE")
     _ensure_column("income_profiles", "current_checking_balance", "current_checking_balance FLOAT DEFAULT 0")
+    _ensure_column("bills", "is_recurring", "is_recurring BOOLEAN DEFAULT 1")
     _ensure_column("bills", "next_due_date", "next_due_date DATE")
     _ensure_column("bills", "is_paid", "is_paid BOOLEAN DEFAULT 0")
     _ensure_column("bills", "last_paid_date", "last_paid_date DATE")

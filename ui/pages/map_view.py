@@ -186,6 +186,15 @@ def _edit_accounts(session):
             node.label = picked.name
         session.commit()
         st.success("Account updated")
+    if st.button("Delete Account", key="delete_account"):
+        session.query(models.BalanceSnapshot).filter(models.BalanceSnapshot.source_type == "account", models.BalanceSnapshot.source_id == picked.id).delete()
+        node = session.scalar(select(models.MoneyMapNode).where(models.MoneyMapNode.node_type == "account", models.MoneyMapNode.ref_id == picked.id))
+        if node:
+            session.query(models.MoneyMapEdge).filter((models.MoneyMapEdge.source_node_id == node.id) | (models.MoneyMapEdge.target_node_id == node.id)).delete()
+            session.delete(node)
+        session.delete(picked)
+        session.commit()
+        st.success("Account deleted")
 
 
 def _edit_pods(session):
@@ -207,6 +216,14 @@ def _edit_pods(session):
             node.label = picked.name
         session.commit()
         st.success(f"Pod updated: {old} -> {picked.name}")
+    if st.button("Delete Pod", key="delete_pod"):
+        node = session.scalar(select(models.MoneyMapNode).where(models.MoneyMapNode.node_type == "pod", models.MoneyMapNode.ref_id == picked.id))
+        if node:
+            session.query(models.MoneyMapEdge).filter((models.MoneyMapEdge.source_node_id == node.id) | (models.MoneyMapEdge.target_node_id == node.id)).delete()
+            session.delete(node)
+        session.delete(picked)
+        session.commit()
+        st.success("Pod deleted")
 
 
 def _edit_liabilities(session):
@@ -231,6 +248,14 @@ def _edit_liabilities(session):
             node.label = picked.name
         session.commit()
         st.success("Liability updated")
+    if st.button("Delete Liability", key="delete_liability"):
+        node = session.scalar(select(models.MoneyMapNode).where(models.MoneyMapNode.node_type == "liability", models.MoneyMapNode.ref_id == picked.id))
+        if node:
+            session.query(models.MoneyMapEdge).filter((models.MoneyMapEdge.source_node_id == node.id) | (models.MoneyMapEdge.target_node_id == node.id)).delete()
+            session.delete(node)
+        session.delete(picked)
+        session.commit()
+        st.success("Liability deleted")
 
 def render(session):
     st.header("Money Map")
