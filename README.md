@@ -109,6 +109,7 @@ scheduler_tick():
   - Add bills with calendar due dates, recurring toggle, category, autopay
   - Mark bills paid with one click and reset paid flags
   - Set next pay date + current checking amount
+  - Visual calendar timeline of upcoming income and bills
   - Visualize due-day load + category mix + remaining cash
   - Generate current-month bill tasks
   - Generate debt reduction/payment plan from liabilities + remaining cash

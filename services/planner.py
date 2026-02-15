@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 import calendar
 
 import pandas as pd
@@ -191,3 +191,73 @@ def build_debt_payment_plan(session, monthly_extra_payment: float = 0.0):
         )
 
     return pd.DataFrame(rows)
+
+
+def build_income_bill_calendar(session, horizon_days: int = 60):
+    profile = get_or_create_income_profile(session)
+    bills = list_bills(session)
+
+    start = date.today()
+    rows = []
+
+    # Income events
+    if profile.monthly_amount > 0 and profile.next_pay_date:
+        pay_date = profile.next_pay_date
+        while pay_date < start:
+            if profile.pay_frequency == "weekly":
+                pay_date = pay_date + timedelta(days=7)
+            elif profile.pay_frequency == "biweekly":
+                pay_date = pay_date + timedelta(days=14)
+            else:
+                next_month = pay_date.month % 12 + 1
+                next_year = pay_date.year + (1 if pay_date.month == 12 else 0)
+                day = min(pay_date.day, calendar.monthrange(next_year, next_month)[1])
+                pay_date = date(next_year, next_month, day)
+
+        end = start + timedelta(days=horizon_days)
+        while pay_date <= end:
+            rows.append({
+                "date": pay_date,
+                "event_type": "income",
+                "name": "Paycheck",
+                "amount": float(profile.monthly_amount if profile.pay_frequency == "monthly" else profile.monthly_amount / (4 if profile.pay_frequency == "weekly" else 2)),
+            })
+            if profile.pay_frequency == "weekly":
+                pay_date = pay_date + timedelta(days=7)
+            elif profile.pay_frequency == "biweekly":
+                pay_date = pay_date + timedelta(days=14)
+            else:
+                next_month = pay_date.month % 12 + 1
+                next_year = pay_date.year + (1 if pay_date.month == 12 else 0)
+                day = min(pay_date.day, calendar.monthrange(next_year, next_month)[1])
+                pay_date = date(next_year, next_month, day)
+
+    # Bill events
+    for bill in bills:
+        due = bill.next_due_date or start
+        while due < start:
+            next_month = due.month % 12 + 1
+            next_year = due.year + (1 if due.month == 12 else 0)
+            day = min(bill.due_day, calendar.monthrange(next_year, next_month)[1])
+            due = date(next_year, next_month, day)
+
+        end = start + timedelta(days=horizon_days)
+        if bill.is_recurring:
+            cursor = due
+            while cursor <= end:
+                rows.append({"date": cursor, "event_type": "bill", "name": bill.name, "amount": -float(bill.amount)})
+                next_month = cursor.month % 12 + 1
+                next_year = cursor.year + (1 if cursor.month == 12 else 0)
+                day = min(bill.due_day, calendar.monthrange(next_year, next_month)[1])
+                cursor = date(next_year, next_month, day)
+        elif due <= end:
+            rows.append({"date": due, "event_type": "bill", "name": bill.name, "amount": -float(bill.amount)})
+
+    if not rows:
+        return pd.DataFrame(columns=["date", "event_type", "name", "amount", "net"]) 
+
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    daily = df.groupby("date", as_index=False)["amount"].sum().rename(columns={"amount": "net"})
+    out = df.merge(daily, on="date", how="left").sort_values(["date", "event_type", "name"])
+    return out

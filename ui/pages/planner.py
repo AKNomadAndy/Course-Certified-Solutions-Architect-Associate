@@ -7,6 +7,7 @@ import streamlit as st
 from services.planner import (
     add_bill,
     build_debt_payment_plan,
+    build_income_bill_calendar,
     generate_monthly_bill_tasks,
     get_or_create_income_profile,
     list_bills,
@@ -110,6 +111,56 @@ def render(session):
         st.dataframe(bills_df.sort_values(["is_paid", "due_day", "bill"]), use_container_width=True)
     else:
         st.info("No bills yet. Add bills to unlock automation and projections.")
+
+
+    st.subheader("Income & Bills Calendar")
+    horizon = st.slider("Calendar horizon (days)", min_value=30, max_value=120, value=60, step=15)
+    cal_df = build_income_bill_calendar(session, horizon_days=int(horizon))
+    if cal_df.empty:
+        st.info("No scheduled income or bills yet.")
+    else:
+        try:
+            import altair as alt
+
+            viz = cal_df.copy()
+            viz["date"] = viz["date"].astype(str)
+            chart = (
+                alt.Chart(viz)
+                .mark_circle(size=140)
+                .encode(
+                    x=alt.X("date:T", title="Date"),
+                    y=alt.Y("event_type:N", title="Type"),
+                    color=alt.Color("event_type:N", scale=alt.Scale(domain=["income", "bill"], range=["#69db7c", "#ff8787"])),
+                    size=alt.Size("amount:Q", title="Amount", scale=alt.Scale(range=[80, 800])),
+                    tooltip=["date:T", "event_type:N", "name:N", "amount:Q", "net:Q"],
+                )
+                .properties(height=320, title="Upcoming Income & Bills")
+            )
+            st.altair_chart(chart, use_container_width=True)
+        except Exception:
+            by_date = cal_df.groupby("date", as_index=False)["net"].sum().set_index("date")
+            st.line_chart(by_date)
+
+        daily_net = cal_df.groupby("date", as_index=False)["net"].sum()
+        try:
+            import altair as alt
+
+            net_chart = (
+                alt.Chart(daily_net)
+                .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
+                .encode(
+                    x=alt.X("date:T", title="Date"),
+                    y=alt.Y("net:Q", title="Net Cashflow"),
+                    color=alt.condition(alt.datum.net >= 0, alt.value("#69db7c"), alt.value("#ff8787")),
+                    tooltip=["date:T", "net:Q"],
+                )
+                .properties(height=220, title="Daily Net Impact")
+            )
+            st.altair_chart(net_chart, use_container_width=True)
+        except Exception:
+            st.bar_chart(daily_net.set_index("date"), color="#9775fa")
+
+        st.dataframe(cal_df.sort_values(["date", "event_type", "name"]), use_container_width=True)
 
     st.subheader("Debt Reduction Plan")
     extra = st.number_input("Extra monthly payment toward debt", min_value=0.0, step=10.0, value=max(0.0, summary["remaining"]))
