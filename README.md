@@ -11,6 +11,7 @@ FlowLedger is a personal-only money router MVP built as an original, dry-run-fir
 - Money Map view (streamlit-agraph, then PyVis fallback, then built-in SVG graph, then table fallback)
 - Deterministic rules engine: Trigger -> Conditions -> ordered Actions (stop-on-failure)
 - Simulator with trace over last N days (default 90) plus 30-day cashflow projection chart
+- Cashflow Forecast page with hybrid deterministic + stochastic confidence bands (P10/P50/P90), overdraft probability, and safe-to-spend
 - Activity feed with trend charts + audit export CSV
 - Next Actions checklist (manual tasks only) + bill task generation
 - Demo Mode idempotent loader with seeded entities, 60+ tx, 8+ rules
@@ -114,6 +115,10 @@ scheduler_tick():
 - **Simulator**
   - Rule picker + lookback days (default 90)
   - Step trace and summary (allocations/tasks/warnings)
+- **Cashflow Forecast**
+  - Deterministic schedule from bills + income
+  - Stochastic remainder from historical daily behavior
+  - P10/P50/P90 balance bands, overdraft risk, and safe-to-spend metric
 - **Activity**
   - Run timeline, trace view, CSV export
 - **Next Actions**
