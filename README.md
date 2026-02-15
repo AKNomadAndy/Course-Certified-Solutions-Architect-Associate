@@ -7,7 +7,7 @@ FlowLedger is a personal-only money router MVP built as an original, dry-run-fir
 ### MVP
 - Single-user Streamlit monolith (no auth)
 - Accounts, Pods (virtual buckets), Liabilities, Income & Bills planner
-- Read-only CSV transaction import + manual balances
+- Read-only CSV transaction import (single or multiple files) + manual balances
 - Money Map view (streamlit-agraph, then PyVis fallback, then built-in SVG graph, then table fallback)
 - Deterministic rules engine: Trigger -> Conditions -> ordered Actions (stop-on-failure)
 - Simulator with trace over last N days (default 90) plus 30-day cashflow projection chart
@@ -157,7 +157,7 @@ tests/
 
 ## Defaults
 - UI layout: left sidebar nav + wide pages + top-level title
-- CSV defaults: required `date, description, amount`; optional `account, category, merchant, currency`
+- CSV defaults: required `date, description, amount`; optional `account, category, merchant, currency`; also supports card statement schema (`trans_date`, `amount_usd`, `card_last4`, etc.)
 - Rule priority default: 100
 - Simulator default lookback: 90 days
 - Percent rounding: `round(value, 2)`
