@@ -5,7 +5,7 @@ import streamlit as st
 from db.engine import SessionLocal, init_db
 from services.scheduler import start_local_scheduler
 from services.user_settings import get_or_create_user_settings
-from ui.pages import activity, command_center, forecast, map_view, planner, rules, settings, simulate, tasks_view
+from ui.pages import activity, command_center, forecast, map_view, planner, rules, scenario_lab, settings, simulate, tasks_view
 
 st.set_page_config(page_title="FlowLedger", layout="wide")
 
@@ -18,6 +18,7 @@ PAGES = {
     "Income & Bills": planner.render,
     "Simulator": simulate.render,
     "Cashflow Forecast": forecast.render,
+    "Scenario Lab": scenario_lab.render,
     "Activity": activity.render,
     "Next Actions": tasks_view.render,
     "Settings": settings.render,

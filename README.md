@@ -29,6 +29,7 @@ FlowLedger is a personal-only money router MVP built as an original, dry-run-fir
 - ✅ Personal autopilot modes with guardrails (suggest-only / auto-task / internal auto-apply)
 - ✅ Explainability layer (why recommendation, what-if-skip, rule-fired inputs, confidence badges)
 - ✅ Data quality ingestion moat (mapping memory, smart dedupe conflicts, categorization loop, quality/anomaly scoring)
+- ✅ Scenario lab / decision simulator (debt, income, rent, FX what-if)
 - Package split to API + frontend while keeping service layer unchanged
 
 ## Domain model (entities + examples)
@@ -136,6 +137,12 @@ scheduler_tick():
 - **Simulator**
   - Rule picker + lookback days (default 90)
   - Step trace and summary (allocations/tasks/warnings)
+- **Scenario Lab**
+  - If I pay extra debt monthly
+  - If income drops by X%
+  - If rent increases in month N
+  - If EURUSD moves to target X
+  - One-click accept scenario to task
 - **Cashflow Forecast**
   - Deterministic schedule from bills + income
   - Stochastic remainder from historical daily behavior
