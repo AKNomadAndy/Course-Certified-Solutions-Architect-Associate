@@ -236,3 +236,32 @@ class Bill(Base):
     last_paid_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class ImportProfile(Base):
+    __tablename__ = "import_profiles"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    institution_label: Mapped[str] = mapped_column(String(120), default="Unknown Export")
+    export_key: Mapped[str] = mapped_column(String(200), unique=True)
+    column_mapping: Mapped[dict] = mapped_column(JSON, default=dict)
+    sample_columns: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class MerchantCategoryRule(Base):
+    __tablename__ = "merchant_category_rules"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    merchant_pattern: Mapped[str] = mapped_column(String(180), unique=True)
+    category: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class ImportRun(Base):
+    __tablename__ = "import_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_name: Mapped[str] = mapped_column(String(220))
+    institution_label: Mapped[str] = mapped_column(String(120), default="Unknown Export")
+    quality_score: Mapped[float] = mapped_column(Float, default=0)
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from services.demo_loader import load_demo_data
@@ -12,8 +13,21 @@ from services.fx import (
     upsert_fx_rate,
     upsert_fx_snapshot,
 )
-from services.imports import ingest_transactions
+from services.imports import (
+    ingest_transactions,
+    list_import_profiles,
+    list_merchant_category_rules,
+    upsert_merchant_category_rule,
+)
 from services.user_settings import AUTOPILOT_MODES, get_or_create_user_settings, save_user_settings
+
+
+def _quality_badge(score: float) -> str:
+    if score >= 85:
+        return "🟢"
+    if score >= 65:
+        return "🟡"
+    return "🔴"
 
 
 def render(session):
@@ -46,27 +60,10 @@ def render(session):
             format_func=lambda x: mode_labels.get(x, x),
         )
         c1, c2, c3 = st.columns(3)
-        floor = c1.number_input(
-            "Guardrail: minimum checking floor",
-            min_value=0.0,
-            value=float(profile.guardrail_min_checking_floor or 0.0),
-            step=25.0,
-        )
-        category_cap = c2.number_input(
-            "Guardrail: max daily category spend (0 disables)",
-            min_value=0.0,
-            value=float(profile.guardrail_max_category_daily or 0.0),
-            step=25.0,
-        )
-        risk_pause = c3.slider(
-            "Guardrail: pause when risk spike score >=",
-            min_value=0.0,
-            max_value=1.0,
-            value=float(profile.guardrail_risk_pause_threshold or 0.6),
-            step=0.05,
-        )
+        floor = c1.number_input("Guardrail: minimum checking floor", min_value=0.0, value=float(profile.guardrail_min_checking_floor or 0.0), step=25.0)
+        category_cap = c2.number_input("Guardrail: max daily category spend (0 disables)", min_value=0.0, value=float(profile.guardrail_max_category_daily or 0.0), step=25.0)
+        risk_pause = c3.slider("Guardrail: pause when risk spike score >=", min_value=0.0, max_value=1.0, value=float(profile.guardrail_risk_pause_threshold or 0.6), step=0.05)
         autopilot_submit = st.form_submit_button("Save autopilot settings")
-
     if autopilot_submit:
         updated = save_user_settings(
             session,
@@ -78,11 +75,6 @@ def render(session):
             guardrail_risk_pause_threshold=risk_pause,
         )
         st.success(f"Autopilot updated: {mode_labels.get(updated.autopilot_mode, updated.autopilot_mode)}")
-
-    st.info(
-        "Autopilot guardrails are enforced during scheduled runs: checking floor protection, "
-        "category daily cap, and automatic pause on spending risk spikes."
-    )
 
     st.divider()
     st.subheader("Multi-currency FX Controls")
@@ -102,21 +94,7 @@ def render(session):
 
     rates = list_fx_rates(session)
     if rates:
-        st.dataframe(
-            [
-                {
-                    "base": r.base_currency,
-                    "quote": r.quote_currency,
-                    "rate": r.rate,
-                    "source": r.source,
-                    "updated_at": r.updated_at,
-                }
-                for r in rates
-            ],
-            use_container_width=True,
-        )
-    else:
-        st.info("No FX rates yet. Add a pair to enable cross-currency controls in forecasting and rules.")
+        st.dataframe([{"base": r.base_currency, "quote": r.quote_currency, "rate": r.rate, "source": r.source, "updated_at": r.updated_at} for r in rates], use_container_width=True)
 
     with st.form("fx_snapshot_form"):
         s1, s2, s3, s4 = st.columns(4)
@@ -132,19 +110,7 @@ def render(session):
     snapshots = list_fx_snapshots(session)
     if snapshots:
         st.caption("Historical FX snapshots")
-        st.dataframe(
-            [
-                {
-                    "date": s.snapshot_date,
-                    "base": s.base_currency,
-                    "quote": s.quote_currency,
-                    "rate": s.rate,
-                    "source": s.source,
-                }
-                for s in snapshots[:120]
-            ],
-            use_container_width=True,
-        )
+        st.dataframe([{"date": s.snapshot_date, "base": s.base_currency, "quote": s.quote_currency, "rate": s.rate, "source": s.source} for s in snapshots[:120]], use_container_width=True)
 
     st.caption(f"Available currencies: {', '.join(available_currencies(session))}")
 
@@ -152,29 +118,87 @@ def render(session):
     exposure_rows = currency_exposure(session, base_currency=profile.base_currency)
     if exposure_rows:
         st.dataframe(exposure_rows, use_container_width=True)
-    else:
-        st.info("No account/pod balances available for exposure view yet.")
 
     st.divider()
+    st.subheader("Data Quality + Ingestion Moat")
+
+    with st.form("merchant_rule_form"):
+        m1, m2 = st.columns(2)
+        merchant_pattern = m1.text_input("Merchant match (contains)", value="")
+        merchant_category = m2.text_input("Always map to category", value="")
+        save_merchant_rule = st.form_submit_button("Save Merchant Category Rule")
+    if save_merchant_rule and merchant_pattern.strip() and merchant_category.strip():
+        upsert_merchant_category_rule(session, merchant_pattern, merchant_category)
+        st.success("Saved merchant category rule")
+
+    merchant_rules = list_merchant_category_rules(session)
+    if merchant_rules:
+        st.caption("Categorization feedback loop rules")
+        st.dataframe(
+            [{"merchant_pattern": r.merchant_pattern, "category": r.category, "created_at": r.created_at} for r in merchant_rules],
+            use_container_width=True,
+        )
+
+    profiles = list_import_profiles(session)
+    if profiles:
+        st.caption("Remembered column mappings by export format")
+        st.dataframe(
+            [
+                {
+                    "institution": p.institution_label,
+                    "export_key": p.export_key,
+                    "sample_columns": ", ".join(p.sample_columns[:8]),
+                    "mapping": p.column_mapping,
+                    "updated_at": p.updated_at,
+                }
+                for p in profiles
+            ],
+            use_container_width=True,
+        )
+
     st.subheader("Import Transactions")
     uploads = st.file_uploader("Upload one or more transactions CSV files", accept_multiple_files=True, type=["csv"])
     if uploads and st.button("Import CSV Files"):
         total_created = 0
-        file_results = []
+        quality_rows = []
         for up in uploads:
             try:
-                result = ingest_transactions(session, up)
+                result = ingest_transactions(session, up, filename=up.name)
                 total_created += result["created"]
-                file_results.append((up.name, result["created"], None))
+                report = result.get("report", {})
+                quality_rows.append(
+                    {
+                        "file": up.name,
+                        "created": result["created"],
+                        "quality": report.get("quality_score", 0),
+                        "rows_total": report.get("rows_total", 0),
+                        "duplicates": report.get("exact_duplicates", 0),
+                        "conflicts": report.get("conflict_duplicates", 0),
+                        "anomalies": len(report.get("anomalies", [])),
+                        "_conflicts": result.get("conflicts", []),
+                        "_anomalies": report.get("anomalies", []),
+                    }
+                )
             except Exception as exc:
-                file_results.append((up.name, 0, str(exc)))
+                quality_rows.append({"file": up.name, "created": 0, "quality": 0, "error": str(exc), "_conflicts": [], "_anomalies": []})
 
         st.success(f"Imported {total_created} new transactions across {len(uploads)} file(s)")
-        for name, created, err in file_results:
-            if err:
-                st.error(f"{name}: failed - {err}")
-            else:
-                st.info(f"{name}: imported {created}")
+
+        for row in quality_rows:
+            if row.get("error"):
+                st.error(f"{row['file']}: failed - {row['error']}")
+                continue
+            st.markdown(f"**{row['file']}** — Quality score: {_quality_badge(row['quality'])} {row['quality']}/100")
+            st.caption(
+                f"created={row['created']} | rows={row['rows_total']} | duplicates={row['duplicates']} | "
+                f"conflicts={row['conflicts']} | anomalies={row['anomalies']}"
+            )
+            if row["_conflicts"]:
+                st.warning("Potential duplicate conflicts detected (smart dedupe resolver):")
+                st.dataframe(pd.DataFrame(row["_conflicts"]), use_container_width=True)
+            if row["_anomalies"]:
+                st.info("Anomaly detector flagged these rows:")
+                st.dataframe(pd.DataFrame(row["_anomalies"]), use_container_width=True)
 
     if st.button("Load Demo Data"):
         load_demo_data(session, ".")

@@ -28,6 +28,7 @@ FlowLedger is a personal-only money router MVP built as an original, dry-run-fir
 - ✅ Rule versioning and rollback snapshots
 - ✅ Personal autopilot modes with guardrails (suggest-only / auto-task / internal auto-apply)
 - ✅ Explainability layer (why recommendation, what-if-skip, rule-fired inputs, confidence badges)
+- ✅ Data quality ingestion moat (mapping memory, smart dedupe conflicts, categorization loop, quality/anomaly scoring)
 - Package split to API + frontend while keeping service layer unchanged
 
 ## Domain model (entities + examples)
@@ -150,6 +151,10 @@ scheduler_tick():
 - **Settings**
   - Historical FX snapshot management
   - Portfolio currency exposure table
+  - Import mapping memory by export format
+  - Smart dedupe conflict resolver table
+  - Merchant→category feedback loop
+  - Import quality score + anomaly detection
   - Personal profile + base currency
   - Personal autopilot modes (suggest only / auto-create tasks / auto-apply internal pod allocations)
   - Guardrails: minimum checking floor, max daily category spend, risk-spike pause threshold
