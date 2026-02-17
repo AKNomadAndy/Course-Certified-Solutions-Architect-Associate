@@ -317,7 +317,7 @@ def build_today_console(session):
             "negative_risk_30d": 0.0,
         }
 
-    upcoming = cal_df[cal_df["date"] <= (today + timedelta(days=7))]
+    upcoming = cal_df[(cal_df["date"] >= today) & (cal_df["date"] <= (today + timedelta(days=7)))]
     due_7d = -float(upcoming[upcoming["event_type"] == "bill"]["amount"].sum()) if not upcoming.empty else 0.0
     income_7d = float(upcoming[upcoming["event_type"] == "income"]["amount"].sum()) if not upcoming.empty else 0.0
 
@@ -344,4 +344,54 @@ def build_today_console(session):
         "next_paycheck": next_paycheck,
         "projected_low_balance_30d": round(projected_low, 2),
         "negative_risk_30d": round(negative_risk, 4),
+    }
+
+
+def build_personal_weekly_actions(session):
+    today = date.today()
+    cal_df = build_income_bill_calendar(session, horizon_days=7)
+    actions = []
+
+    if cal_df.empty:
+        return actions
+
+    window = cal_df[(cal_df["date"] >= today) & (cal_df["date"] <= (today + timedelta(days=7)))]
+    bills = window[window["event_type"] == "bill"].sort_values("date")
+    incomes = window[window["event_type"] == "income"].sort_values("date")
+
+    for _, row in bills.iterrows():
+        actions.append({
+            "date": row["date"],
+            "action": f"Pay {row['name']}",
+            "amount": round(abs(float(row["amount"])), 2),
+            "priority": "high",
+            "reason": "Scheduled bill due within 7 days",
+        })
+
+    for _, row in incomes.iterrows():
+        actions.append({
+            "date": row["date"],
+            "action": "Review paycheck allocation",
+            "amount": round(float(row["amount"]), 2),
+            "priority": "medium",
+            "reason": "Income event expected within 7 days",
+        })
+
+    return sorted(actions, key=lambda x: (x["date"], 0 if x["priority"] == "high" else 1, x["action"]))
+
+
+def summarize_debt_payoff(schedule_df: pd.DataFrame):
+    if schedule_df.empty:
+        return {"months": 0, "total_interest": 0.0, "ending_total_balance": 0.0}
+
+    months = int(schedule_df["month"].max())
+    total_interest = float(schedule_df["interest"].sum())
+    ending_total_balance = float(
+        schedule_df.sort_values(["liability", "month"]).groupby("liability", as_index=False)["ending_balance"].last()["ending_balance"].sum()
+    )
+
+    return {
+        "months": months,
+        "total_interest": round(total_interest, 2),
+        "ending_total_balance": round(ending_total_balance, 2),
     }

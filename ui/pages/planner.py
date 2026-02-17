@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from datetime import date
 
+import pandas as pd
 import streamlit as st
 
 from services.planner import (
     add_bill,
     build_debt_payment_plan,
+    build_debt_payoff_schedule,
     build_income_bill_calendar,
+    build_personal_weekly_actions,
+    build_today_console,
     generate_monthly_bill_tasks,
     get_or_create_income_profile,
     list_bills,
@@ -15,12 +19,43 @@ from services.planner import (
     monthly_plan_summary,
     reset_bill_paid_flags,
     save_income_profile,
+    summarize_debt_payoff,
 )
+
+
+def _render_today_console(session):
+    st.subheader("Today Console (Personal)")
+    console = build_today_console(session)
+
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("Bills due (7d)", f"${console['due_7d']:.2f}")
+    c2.metric("Income expected (7d)", f"${console['income_7d']:.2f}")
+    c3.metric("Unpaid bills", int(console["unpaid_count"]))
+    c4.metric("Next paycheck", str(console["next_paycheck"] or "N/A"))
+    c5.metric("Projected low bal (30d)", f"${console['projected_low_balance_30d']:.2f}")
+    c6.metric("Negative risk (30d)", f"{console['negative_risk_30d']:.0%}")
+
+    if console["negative_risk_30d"] > 0:
+        st.warning("Checking balance may go negative during this 30-day window. Consider reducing discretionary spend or shifting bill dates.")
+
+
+def _render_weekly_actions(session):
+    st.subheader("Weekly Action Plan")
+    actions = build_personal_weekly_actions(session)
+    if not actions:
+        st.info("No scheduled actions in the next 7 days.")
+        return
+
+    df = pd.DataFrame(actions)
+    st.dataframe(df, use_container_width=True)
 
 
 def render(session):
     st.header("Income & Bills Planner")
-    st.caption("Simple cash plan: recurring income/bills, payment calendar, and debt payoff guidance.")
+    st.caption("Personal cash operating system: recurring income/bills, weekly actions, debt payoff, and what-if planning.")
+
+    _render_today_console(session)
+    _render_weekly_actions(session)
 
     profile = get_or_create_income_profile(session)
 
@@ -80,18 +115,7 @@ def render(session):
             st.line_chart(by_day.set_index("due_day"))
         with c2:
             by_cat = bills_df.groupby("category", as_index=False)["amount"].sum()
-            try:
-                import altair as alt
-
-                chart = (
-                    alt.Chart(by_cat)
-                    .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
-                    .encode(x="category:N", y="amount:Q", color=alt.value("#ff8787"), tooltip=["category", "amount"])
-                    .properties(height=260)
-                )
-                st.altair_chart(chart, use_container_width=True)
-            except Exception:
-                st.bar_chart(by_cat, x="category", y="amount", color="#ff8787")
+            st.bar_chart(by_cat, x="category", y="amount", color="#ff8787")
 
         st.subheader("Mark bills paid")
         bill_objs = list_bills(session)
@@ -112,58 +136,19 @@ def render(session):
     else:
         st.info("No bills yet. Add bills to unlock automation and projections.")
 
-
     st.subheader("Income & Bills Calendar")
     horizon = st.slider("Calendar horizon (days)", min_value=30, max_value=120, value=60, step=15)
     cal_df = build_income_bill_calendar(session, horizon_days=int(horizon))
     if cal_df.empty:
         st.info("No scheduled income or bills yet.")
     else:
-        try:
-            import altair as alt
-
-            viz = cal_df.copy()
-            viz["date"] = viz["date"].astype(str)
-            chart = (
-                alt.Chart(viz)
-                .mark_circle(size=140)
-                .encode(
-                    x=alt.X("date:T", title="Date"),
-                    y=alt.Y("event_type:N", title="Type"),
-                    color=alt.Color("event_type:N", scale=alt.Scale(domain=["income", "bill"], range=["#69db7c", "#ff8787"])),
-                    size=alt.Size("amount:Q", title="Amount", scale=alt.Scale(range=[80, 800])),
-                    tooltip=["date:T", "event_type:N", "name:N", "amount:Q", "net:Q"],
-                )
-                .properties(height=320, title="Upcoming Income & Bills")
-            )
-            st.altair_chart(chart, use_container_width=True)
-        except Exception:
-            by_date = cal_df.groupby("date", as_index=False)["net"].sum().set_index("date")
-            st.line_chart(by_date)
-
-        daily_net = cal_df.groupby("date", as_index=False)["net"].sum()
-        try:
-            import altair as alt
-
-            net_chart = (
-                alt.Chart(daily_net)
-                .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
-                .encode(
-                    x=alt.X("date:T", title="Date"),
-                    y=alt.Y("net:Q", title="Net Cashflow"),
-                    color=alt.condition(alt.datum.net >= 0, alt.value("#69db7c"), alt.value("#ff8787")),
-                    tooltip=["date:T", "net:Q"],
-                )
-                .properties(height=220, title="Daily Net Impact")
-            )
-            st.altair_chart(net_chart, use_container_width=True)
-        except Exception:
-            st.bar_chart(daily_net.set_index("date"), color="#9775fa")
-
+        by_date = cal_df.groupby("date", as_index=False)["net"].sum().set_index("date")
+        st.line_chart(by_date)
         st.dataframe(cal_df.sort_values(["date", "event_type", "name"]), use_container_width=True)
 
     st.subheader("Debt Reduction Plan")
     extra = st.number_input("Extra monthly payment toward debt", min_value=0.0, step=10.0, value=max(0.0, summary["remaining"]))
+    payoff_months = st.slider("Payoff projection months", min_value=6, max_value=84, value=24, step=6)
     if st.button("Generate Debt Plan"):
         plan = build_debt_payment_plan(session, monthly_extra_payment=extra)
         if plan.empty:
@@ -171,9 +156,19 @@ def render(session):
         else:
             st.dataframe(plan, use_container_width=True)
             target = plan.iloc[0]
-            st.success(
-                f"Plan: pay minimums on all debts and target extra payment to **{target['liability']}** (APR {target['apr']:.2f}%)."
-            )
+            st.success(f"Plan: pay minimums and target extra payment to **{target['liability']}** (APR {target['apr']:.2f}%).")
+
+            payoff = build_debt_payoff_schedule(session, monthly_extra_payment=extra, months=payoff_months)
+            payoff_summary = summarize_debt_payoff(payoff)
+            p1, p2, p3 = st.columns(3)
+            p1.metric("Projection length", f"{payoff_summary['months']} month(s)")
+            p2.metric("Projected interest", f"${payoff_summary['total_interest']:.2f}")
+            p3.metric("Remaining balance", f"${payoff_summary['ending_total_balance']:.2f}")
+
+            if not payoff.empty:
+                trend = payoff.groupby("month", as_index=False)["ending_balance"].sum().set_index("month")
+                st.line_chart(trend)
+                st.dataframe(payoff, use_container_width=True)
 
     cta1, cta2 = st.columns(2)
     if cta1.button("Generate This Month's Bill Tasks"):

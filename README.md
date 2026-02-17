@@ -113,6 +113,7 @@ scheduler_tick():
   - Visualize due-day load + category mix + remaining cash
   - Generate current-month bill tasks
   - Generate debt reduction/payment plan from liabilities + remaining cash
+  - View debt payoff schedule projection with monthly trend and interest summary
 - **Rule Builder**
   - Trigger selector (transaction/schedule/manual)
   - JSON-based condition/action wizard for MVP speed
