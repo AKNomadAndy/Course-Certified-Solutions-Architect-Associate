@@ -3,6 +3,9 @@ from __future__ import annotations
 import streamlit as st
 
 from services.command_center import accept_weekly_plan, build_command_center
+from services.demo_loader import load_demo_data
+from services.planner import generate_monthly_bill_tasks
+from services.rules_engine import scheduler_tick
 
 
 RISK_COLORS = {
@@ -17,9 +20,61 @@ def render(session):
     st.caption("Your unified daily operating console: decisions, risk, deltas, and one-click weekly acceptance.")
 
     model = build_command_center(session)
+    brief = model["daily_brief"]
+    wizard = model["setup_wizard"]
     decisions = model["top_decisions"]
     risk = model["weekly_cash_risk"]
     changes = model["changes_since_yesterday"]
+
+    st.subheader("Daily Brief")
+    b1, b2, b3 = st.columns(3)
+    b1.metric("Open tasks", str(brief["open_tasks"]))
+    b2.metric("Rule runs (24h)", str(brief["recent_runs_24h"]))
+    b3.metric("Focus", "Backlog" if brief["open_tasks"] else "Stable")
+    st.info(f"{brief['headline']} — {brief['priority_note']}")
+
+    st.subheader("Quick Actions")
+    st.caption("Keyboard-first: use quick command box (`a`,`s`,`b`,`d`) then press Enter.")
+    quick_cols = st.columns(4)
+    if quick_cols[0].button("Accept weekly plan"):
+        result = accept_weekly_plan(session)
+        st.success(f"Accepted weekly plan ({result['created_bill_tasks']} bill task(s) created).")
+    if quick_cols[1].button("Run scheduler now"):
+        runs = scheduler_tick(session)
+        st.success(f"Scheduler executed now. Runs evaluated: {len(runs)}")
+    if quick_cols[2].button("Generate bill tasks"):
+        created = generate_monthly_bill_tasks(session)
+        st.success(f"Created {created} bill task(s).")
+    if quick_cols[3].button("Load demo data"):
+        load_demo_data(session, ".")
+        st.success("Demo data loaded.")
+
+    with st.form("quick_command_form"):
+        quick_cmd = st.text_input("Quick command", value="", placeholder="a=accept weekly, s=scheduler tick, b=bill tasks, d=demo")
+        run_quick = st.form_submit_button("Run quick command")
+    if run_quick and quick_cmd:
+        cmd = quick_cmd.strip().lower()
+        if cmd == "a":
+            result = accept_weekly_plan(session)
+            st.success(f"Quick action complete: accepted weekly plan ({result['created_bill_tasks']} bill task(s)).")
+        elif cmd == "s":
+            runs = scheduler_tick(session)
+            st.success(f"Quick action complete: scheduler tick executed ({len(runs)} run(s)).")
+        elif cmd == "b":
+            created = generate_monthly_bill_tasks(session)
+            st.success(f"Quick action complete: created {created} bill task(s).")
+        elif cmd == "d":
+            load_demo_data(session, ".")
+            st.success("Quick action complete: demo data loaded.")
+        else:
+            st.warning("Unknown quick command. Use a/s/b/d.")
+
+    if wizard["is_empty_state"]:
+        st.subheader("Setup Wizard")
+        st.caption("It looks like this is a fresh setup. Follow these defaults to get started in under 2 minutes.")
+        for idx, step in enumerate(wizard["steps"], start=1):
+            st.markdown(f"**{idx}. {step['title']}**")
+            st.caption(step["hint"])
 
     st.subheader("Today's Top 3 Decisions")
     dcols = st.columns(3)

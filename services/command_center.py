@@ -133,10 +133,36 @@ def _changes_since_yesterday(session) -> dict:
 
 
 def build_command_center(session) -> dict:
+    open_tasks = session.scalar(select(func.count()).select_from(models.Task).where(models.Task.status == "open")) or 0
+    recent_runs = session.scalar(select(func.count()).select_from(models.Run).where(models.Run.created_at >= date.today() - timedelta(days=1))) or 0
+    tx_count = session.scalar(select(func.count()).select_from(models.Transaction)) or 0
+    account_count = session.scalar(select(func.count()).select_from(models.Account)) or 0
+    rule_count = session.scalar(select(func.count()).select_from(models.Rule)) or 0
+
+    setup_steps = []
+    if account_count == 0:
+        setup_steps.append({"title": "Add first account", "hint": "Go to Money Map and create checking/savings."})
+    if tx_count == 0:
+        setup_steps.append({"title": "Import transactions", "hint": "Use Settings -> Import Transactions (multi-file supported)."})
+    if rule_count == 0:
+        setup_steps.append({"title": "Create first rule", "hint": "Open Rule Builder and save an active rule."})
+
+    daily_brief = {
+        "headline": "Stay steady today" if open_tasks == 0 else "Focus on your top tasks first",
+        "open_tasks": int(open_tasks),
+        "recent_runs_24h": int(recent_runs),
+        "priority_note": "No urgent backlog detected." if open_tasks == 0 else f"You have {open_tasks} open task(s) to clear.",
+    }
+
     return {
         "top_decisions": _top_decisions(session),
         "weekly_cash_risk": _weekly_cash_risk(session),
         "changes_since_yesterday": _changes_since_yesterday(session),
+        "daily_brief": daily_brief,
+        "setup_wizard": {
+            "is_empty_state": bool(setup_steps),
+            "steps": setup_steps,
+        },
     }
 
 

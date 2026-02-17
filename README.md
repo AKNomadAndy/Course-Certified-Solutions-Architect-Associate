@@ -105,6 +105,9 @@ scheduler_tick():
 ## Streamlit UX map
 
 - **Command Center**
+  - Daily brief card (headline + today priorities)
+  - Keyboard-first quick actions (command box + one-click actions)
+  - Empty-state setup wizard for first-run onboarding
   - Today's top 3 decisions
   - This week's cash risk with balance-band chart
   - What changed since yesterday (cash/runs/tasks)

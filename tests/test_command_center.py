@@ -50,7 +50,16 @@ def test_build_command_center_has_required_sections(session):
     assert "top_decisions" in model
     assert "weekly_cash_risk" in model
     assert "changes_since_yesterday" in model
+    assert "daily_brief" in model
+    assert "setup_wizard" in model
     assert len(model["top_decisions"]) >= 1
+
+
+def test_build_command_center_empty_state_wizard(session):
+    model = build_command_center(session)
+
+    assert model["setup_wizard"]["is_empty_state"] is True
+    assert len(model["setup_wizard"]["steps"]) >= 1
 
 
 def test_accept_weekly_plan_is_idempotent(session):
