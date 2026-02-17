@@ -8,6 +8,7 @@ from sqlalchemy import select
 from db import models
 from services.forecasting import generate_hybrid_forecast, summarize_forecast
 from services.fx import convert_amount
+from services.personal_intelligence import track_recommendation_feedback
 from services.planner import build_debt_payoff_schedule, get_or_create_income_profile, list_bills, summarize_debt_payoff
 
 
@@ -142,4 +143,12 @@ def save_scenario_task(session, title: str, note: str):
     session.add(task)
     session.commit()
     session.refresh(task)
+    track_recommendation_feedback(
+        session,
+        recommendation_key=ref,
+        source="scenario_lab",
+        title=title,
+        accepted=True,
+        context={"note": note},
+    )
     return task

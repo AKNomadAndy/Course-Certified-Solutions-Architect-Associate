@@ -19,6 +19,8 @@ def test_save_user_settings_normalizes_values(session):
         guardrail_min_checking_floor=125.0,
         guardrail_max_category_daily=200.0,
         guardrail_risk_pause_threshold=0.7,
+        risk_tolerance="conservative",
+        adaptive_thresholds_enabled=False,
     )
 
     assert updated.user_name == "Alex"
@@ -27,6 +29,8 @@ def test_save_user_settings_normalizes_values(session):
     assert updated.guardrail_min_checking_floor == 125.0
     assert updated.guardrail_max_category_daily == 200.0
     assert updated.guardrail_risk_pause_threshold == 0.7
+    assert updated.risk_tolerance == "conservative"
+    assert updated.adaptive_thresholds_enabled is False
 
 
 def test_invalid_autopilot_mode_falls_back(session):

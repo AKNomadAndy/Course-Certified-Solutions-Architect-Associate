@@ -5,6 +5,7 @@ from sqlalchemy import select
 from db import models
 
 AUTOPILOT_MODES = ("suggest_only", "auto_create_tasks", "auto_apply_internal_allocations")
+RISK_TOLERANCES = ("conservative", "balanced", "aggressive")
 
 
 def get_or_create_user_settings(session):
@@ -27,6 +28,8 @@ def save_user_settings(
     guardrail_min_checking_floor: float | None = None,
     guardrail_max_category_daily: float | None = None,
     guardrail_risk_pause_threshold: float | None = None,
+    risk_tolerance: str | None = None,
+    adaptive_thresholds_enabled: bool | None = None,
 ):
     settings = get_or_create_user_settings(session)
     settings.user_name = (user_name or "Personal User").strip() or "Personal User"
@@ -47,6 +50,13 @@ def save_user_settings(
     if guardrail_risk_pause_threshold is not None:
         threshold = float(guardrail_risk_pause_threshold)
         settings.guardrail_risk_pause_threshold = min(1.0, max(0.0, threshold))
+
+    if risk_tolerance is not None:
+        rt = (risk_tolerance or "balanced").strip().lower()
+        settings.risk_tolerance = rt if rt in RISK_TOLERANCES else "balanced"
+
+    if adaptive_thresholds_enabled is not None:
+        settings.adaptive_thresholds_enabled = bool(adaptive_thresholds_enabled)
 
     session.commit()
     session.refresh(settings)

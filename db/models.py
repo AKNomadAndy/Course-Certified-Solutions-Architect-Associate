@@ -27,6 +27,8 @@ class UserSettings(Base):
     guardrail_min_checking_floor: Mapped[float] = mapped_column(Float, default=0)
     guardrail_max_category_daily: Mapped[float | None] = mapped_column(Float, nullable=True)
     guardrail_risk_pause_threshold: Mapped[float] = mapped_column(Float, default=0.6)
+    risk_tolerance: Mapped[str] = mapped_column(String(20), default="balanced")
+    adaptive_thresholds_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -265,3 +267,22 @@ class ImportRun(Base):
     quality_score: Mapped[float] = mapped_column(Float, default=0)
     summary: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class RecommendationFeedback(Base):
+    __tablename__ = "recommendation_feedback"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recommendation_key: Mapped[str] = mapped_column(String(180), unique=True)
+    source: Mapped[str] = mapped_column(String(60), default="command_center")
+    title: Mapped[str] = mapped_column(String(220))
+    accepted: Mapped[bool] = mapped_column(Boolean, default=True)
+    context: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class MonthlyRetrospective(Base):
+    __tablename__ = "monthly_retrospectives"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    month_key: Mapped[str] = mapped_column(String(7), unique=True)
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    generated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

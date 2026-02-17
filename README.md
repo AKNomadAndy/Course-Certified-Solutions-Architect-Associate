@@ -110,6 +110,11 @@ scheduler_tick():
   - What changed since yesterday (cash/runs/tasks)
   - Why this recommendation + what-if-I-skip explainers
   - One-click weekly plan acceptance
+- **Personal Intelligence**
+  - Monthly retrospective (what improved vs worsened)
+  - Recommendation acceptance tracking summary
+  - Adaptive thresholds from risk tolerance + spend volatility + paycheck timing
+  - Auto-generated monthly policy tweaks with one-click apply
 - **Money Map**
   - Per-account and per-pod currency policies
   - Graph canvas using `streamlit-agraph`
@@ -185,7 +190,9 @@ services/
   simulator.py
   tasks.py
   demo_loader.py
+  personal_intelligence.py
 ui/pages/
+  intelligence.py
   map_view.py
   rules.py
   simulate.py

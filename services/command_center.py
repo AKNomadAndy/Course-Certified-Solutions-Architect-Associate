@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 
 from db import models
 from services.forecasting import generate_hybrid_forecast, summarize_forecast
+from services.personal_intelligence import track_recommendation_feedback
 from services.planner import generate_monthly_bill_tasks, list_bills
 
 
@@ -155,6 +156,15 @@ def accept_weekly_plan(session) -> dict:
         )
         created = 1
     session.commit()
+
+    track_recommendation_feedback(
+        session,
+        recommendation_key=week_ref,
+        source="command_center",
+        title="Accept Weekly Plan",
+        accepted=True,
+        context={"created_plan_task": created, "created_bill_tasks": int(created_bill_tasks)},
+    )
     return {
         "created_plan_task": created,
         "created_bill_tasks": int(created_bill_tasks),

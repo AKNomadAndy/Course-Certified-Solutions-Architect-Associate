@@ -34,4 +34,6 @@ def init_db() -> None:
     _ensure_column("user_settings", "guardrail_min_checking_floor", "guardrail_min_checking_floor FLOAT DEFAULT 0")
     _ensure_column("user_settings", "guardrail_max_category_daily", "guardrail_max_category_daily FLOAT")
     _ensure_column("user_settings", "guardrail_risk_pause_threshold", "guardrail_risk_pause_threshold FLOAT DEFAULT 0.6")
+    _ensure_column("user_settings", "risk_tolerance", "risk_tolerance VARCHAR(20) DEFAULT 'balanced'")
+    _ensure_column("user_settings", "adaptive_thresholds_enabled", "adaptive_thresholds_enabled BOOLEAN DEFAULT 1")
     _ensure_column("pods", "currency", "currency VARCHAR(8) DEFAULT 'USD'")
