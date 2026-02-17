@@ -107,7 +107,28 @@ class Rule(Base):
     conditions: Mapped[list] = mapped_column(JSON, default=list)
     actions: Mapped[list] = mapped_column(JSON, default=list)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    lifecycle_state: Mapped[str] = mapped_column(String(16), default="draft")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class RuleVersion(Base):
+    __tablename__ = "rule_versions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule_id: Mapped[int] = mapped_column(ForeignKey("rules.id"))
+    version_number: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(160))
+    priority: Mapped[int] = mapped_column(Integer)
+    trigger_type: Mapped[str] = mapped_column(String(32))
+    trigger_config: Mapped[dict] = mapped_column(JSON, default=dict)
+    conditions: Mapped[list] = mapped_column(JSON, default=list)
+    actions: Mapped[list] = mapped_column(JSON, default=list)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    lifecycle_state: Mapped[str] = mapped_column(String(16), default="draft")
+    change_note: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    is_rollback: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("rule_id", "version_number", name="uq_rule_version_number"),)
 
 
 class Run(Base):

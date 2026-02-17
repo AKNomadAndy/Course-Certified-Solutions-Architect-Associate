@@ -8,6 +8,7 @@ from sqlalchemy import select
 from db import models
 from services.fx import available_currencies
 from services.rule_templates import build_template_payload, list_rule_templates
+from services.rule_versions import list_rule_versions, rollback_to_version, snapshot_rule, version_diff
 from services.rules_engine import run_rule
 
 
@@ -21,6 +22,10 @@ def _load_json(label: str, value: str, expected_type):
     except json.JSONDecodeError as exc:
         st.error(f"Invalid JSON for {label}: {exc}")
         return None
+
+
+def _state_index(options: list[str], value: str) -> int:
+    return options.index(value) if value in options else 0
 
 
 def render(session):
@@ -50,7 +55,13 @@ def render(session):
             st.success("Template applied. Review and save below.")
 
     rules = session.scalars(select(models.Rule).order_by(models.Rule.priority.desc(), models.Rule.created_at.asc())).all()
-    picked = st.selectbox("Edit existing rule", [None] + rules, format_func=lambda r: "Create new rule" if r is None else f"#{r.id} {r.name}")
+    rule_options = [None] + [r.id for r in rules]
+    selected_rule_id = st.selectbox(
+        "Edit existing rule",
+        rule_options,
+        format_func=lambda rid: "Create new rule" if rid is None else f"#{rid} {session.get(models.Rule, rid).name}",
+    )
+    picked = session.get(models.Rule, selected_rule_id) if selected_rule_id else None
 
     base = {
         "name": st.session_state.get("rule_name", ""),
@@ -60,6 +71,7 @@ def render(session):
         "conditions": st.session_state.get("rule_conditions", '[{"type":"amount_gte","value":100}]'),
         "actions": st.session_state.get("rule_actions", '[{"type":"allocate_fixed","pod_id":1,"amount":50,"up_to_available":true}]'),
         "enabled": st.session_state.get("rule_enabled", False),
+        "lifecycle_state": st.session_state.get("rule_lifecycle_state", "draft"),
     }
     if picked:
         base = {
@@ -70,6 +82,7 @@ def render(session):
             "conditions": json.dumps(picked.conditions, indent=2),
             "actions": json.dumps(picked.actions, indent=2),
             "enabled": picked.enabled,
+            "lifecycle_state": picked.lifecycle_state,
         }
 
     with st.expander("No-code condition/action helper"):
@@ -95,16 +108,25 @@ def render(session):
             st.rerun()
 
     name = st.text_input("Rule name", value=base["name"], key="rule_name")
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     priority = c1.number_input("Priority (higher wins)", min_value=1, max_value=999, value=int(base["priority"]), key="rule_priority")
     enabled = c2.checkbox("Enabled", value=bool(base["enabled"]), key="rule_enabled")
+    lifecycle_options = ["draft", "active"]
+    lifecycle_state = c3.selectbox(
+        "Lifecycle",
+        lifecycle_options,
+        index=_state_index(lifecycle_options, str(base["lifecycle_state"])),
+        key="rule_lifecycle_state",
+    )
 
     trigger_type = st.selectbox("Trigger", ["transaction", "schedule", "manual"], index=["transaction", "schedule", "manual"].index(base["trigger_type"]), key="rule_trigger_type")
     trigger_config_text = st.text_area("Trigger config JSON", value=base["trigger_config"], height=100, key="rule_trigger_config")
     conditions_text = st.text_area("Conditions JSON list", value=base["conditions"], height=120, key="rule_conditions")
     actions_text = st.text_area("Actions JSON list", value=base["actions"], height=140, key="rule_actions")
 
-    save_col, sim_col, del_col = st.columns(3)
+    change_note = st.text_input("Change note (optional)", value="", help="Saved to version history.")
+
+    save_col, promote_col, sim_col, del_col = st.columns(4)
     if save_col.button("Save Rule", type="primary"):
         trigger_config = _load_json("trigger_config", trigger_config_text, dict)
         conditions = _load_json("conditions", conditions_text, list)
@@ -113,6 +135,7 @@ def render(session):
             target = picked or models.Rule(name=name.strip())
             if not picked:
                 session.add(target)
+                session.flush()
             target.name = name.strip()
             target.priority = int(priority)
             target.trigger_type = trigger_type
@@ -120,11 +143,26 @@ def render(session):
             target.conditions = conditions
             target.actions = actions
             target.enabled = enabled
+            target.lifecycle_state = lifecycle_state
+            snapshot_rule(session, target, change_note=change_note or "Saved from Rule Builder")
             session.commit()
             st.success(f"Saved rule: {target.name}")
+            st.rerun()
+
+    if promote_col.button("Promote to Active"):
+        if not picked:
+            st.info("Select a saved rule first.")
+        else:
+            target = session.get(models.Rule, picked.id)
+            target.lifecycle_state = "active"
+            target.enabled = True
+            snapshot_rule(session, target, change_note=change_note or "Promoted to active")
+            session.commit()
+            st.success("Rule promoted to active.")
+            st.rerun()
 
     if sim_col.button("Simulate on latest transaction"):
-        rule = picked
+        rule = session.get(models.Rule, picked.id) if picked else None
         tx = session.scalar(select(models.Transaction).order_by(models.Transaction.created_at.desc()))
         if rule and tx:
             run, _ = run_rule(
@@ -138,9 +176,52 @@ def render(session):
             st.info("Select a saved rule and ensure at least one transaction exists.")
 
     if del_col.button("Delete Rule") and picked:
-        session.delete(picked)
-        session.commit()
-        st.success("Rule deleted")
+        target = session.get(models.Rule, picked.id)
+        if target:
+            session.delete(target)
+            session.commit()
+            st.success("Rule deleted")
+            st.rerun()
+
+    st.subheader("Version History")
+    if picked:
+        versions = list_rule_versions(session, picked.id)
+        st.dataframe(
+            [
+                {
+                    "id": v.id,
+                    "version": v.version_number,
+                    "name": v.name,
+                    "state": v.lifecycle_state,
+                    "enabled": v.enabled,
+                    "rollback": v.is_rollback,
+                    "note": v.change_note,
+                    "created_at": v.created_at,
+                }
+                for v in versions
+            ],
+            use_container_width=True,
+        )
+        if len(versions) >= 2:
+            col1, col2 = st.columns(2)
+            lhs = col1.selectbox("Diff from", versions, format_func=lambda v: f"v{v.version_number} ({v.created_at})", key="diff_lhs")
+            rhs = col2.selectbox("Diff to", versions, format_func=lambda v: f"v{v.version_number} ({v.created_at})", key="diff_rhs")
+            st.code(version_diff(lhs, rhs) or "No diff")
+
+        rollback_version = st.selectbox(
+            "Rollback target",
+            versions,
+            format_func=lambda v: f"v{v.version_number} - {v.change_note or v.name}",
+            key="rollback_target",
+        ) if versions else None
+        if rollback_version and st.button("Rollback to selected version"):
+            target = session.get(models.Rule, picked.id)
+            rollback_to_version(session, target, rollback_version)
+            session.commit()
+            st.success(f"Rolled back to v{rollback_version.version_number}")
+            st.rerun()
+    else:
+        st.info("Select a rule to view version history and rollback controls.")
 
     st.subheader("All Rules")
     st.dataframe(
@@ -151,6 +232,7 @@ def render(session):
                 "priority": r.priority,
                 "trigger": r.trigger_type,
                 "enabled": r.enabled,
+                "state": r.lifecycle_state,
                 "created_at": r.created_at,
             }
             for r in rules

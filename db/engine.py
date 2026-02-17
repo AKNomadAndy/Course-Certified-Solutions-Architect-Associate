@@ -29,3 +29,4 @@ def init_db() -> None:
     _ensure_column("bills", "next_due_date", "next_due_date DATE")
     _ensure_column("bills", "is_paid", "is_paid BOOLEAN DEFAULT 0")
     _ensure_column("bills", "last_paid_date", "last_paid_date DATE")
+    _ensure_column("rules", "lifecycle_state", "lifecycle_state VARCHAR(16) DEFAULT 'draft'")

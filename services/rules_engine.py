@@ -180,7 +180,9 @@ def evaluate_rules_for_event(session, event: dict, dry_run: bool = True):
     if event.get("transaction_id"):
         tx = session.get(models.Transaction, event["transaction_id"])
 
-    rules = session.scalars(select(models.Rule).where(models.Rule.enabled == True)).all()  # noqa: E712
+    rules = session.scalars(
+        select(models.Rule).where(models.Rule.enabled == True, models.Rule.lifecycle_state == "active")
+    ).all()  # noqa: E712
     ordered = sort_rules(rules)
     runs = []
     for rule in ordered:
