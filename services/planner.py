@@ -9,6 +9,9 @@ from sqlalchemy import select
 from db import models
 
 
+PAY_DAYS = {"weekly": 7, "biweekly": 14, "monthly": None}
+
+
 def get_or_create_income_profile(session):
     profile = session.scalar(select(models.IncomeProfile).where(models.IncomeProfile.name == "Primary Income"))
     if not profile:
@@ -17,6 +20,14 @@ def get_or_create_income_profile(session):
         session.commit()
         session.refresh(profile)
     return profile
+
+
+def _next_month_same_day(d: date, preferred_day: int | None = None) -> date:
+    preferred_day = preferred_day or d.day
+    next_month = d.month % 12 + 1
+    next_year = d.year + (1 if d.month == 12 else 0)
+    day = min(preferred_day, calendar.monthrange(next_year, next_month)[1])
+    return date(next_year, next_month, day)
 
 
 def save_income_profile(
@@ -165,7 +176,9 @@ def generate_monthly_bill_tasks(session):
 
 
 def build_debt_payment_plan(session, monthly_extra_payment: float = 0.0):
-    liabilities = session.scalars(select(models.Liability).order_by(models.Liability.apr.desc().nullslast(), models.Liability.statement_balance.desc())).all()
+    liabilities = session.scalars(
+        select(models.Liability).order_by(models.Liability.apr.desc().nullslast(), models.Liability.statement_balance.desc())
+    ).all()
     if not liabilities:
         return pd.DataFrame(columns=["liability", "statement_balance", "min_due", "apr", "suggested_payment", "strategy"])
 
@@ -193,11 +206,56 @@ def build_debt_payment_plan(session, monthly_extra_payment: float = 0.0):
     return pd.DataFrame(rows)
 
 
+def build_debt_payoff_schedule(session, monthly_extra_payment: float = 0.0, months: int = 24):
+    plan = build_debt_payment_plan(session, monthly_extra_payment)
+    if plan.empty:
+        return pd.DataFrame(columns=["month", "liability", "starting_balance", "interest", "payment", "ending_balance"])
+
+    balances = {row["liability"]: float(row["statement_balance"]) for _, row in plan.iterrows()}
+    aprs = {row["liability"]: float(row["apr"] or 0.0) for _, row in plan.iterrows()}
+    min_dues = {row["liability"]: float(row["min_due"]) for _, row in plan.iterrows()}
+    target = plan.iloc[0]["liability"]
+    extra_pool = max(0.0, monthly_extra_payment)
+
+    rows = []
+    for month in range(1, months + 1):
+        all_zero = all(v <= 0.01 for v in balances.values())
+        if all_zero:
+            break
+
+        for liability in list(balances.keys()):
+            bal = balances[liability]
+            if bal <= 0.01:
+                continue
+            monthly_rate = (aprs[liability] / 100) / 12
+            interest = bal * monthly_rate
+            payment = min_dues[liability]
+            if liability == target:
+                payment += extra_pool
+            payment = min(payment, bal + interest)
+            end_bal = max(0.0, bal + interest - payment)
+            balances[liability] = end_bal
+
+            rows.append(
+                {
+                    "month": month,
+                    "liability": liability,
+                    "starting_balance": round(bal, 2),
+                    "interest": round(interest, 2),
+                    "payment": round(payment, 2),
+                    "ending_balance": round(end_bal, 2),
+                }
+            )
+
+    return pd.DataFrame(rows)
+
+
 def build_income_bill_calendar(session, horizon_days: int = 60):
     profile = get_or_create_income_profile(session)
     bills = list_bills(session)
 
     start = date.today()
+    end = start + timedelta(days=horizon_days)
     rows = []
 
     # Income events
@@ -209,55 +267,81 @@ def build_income_bill_calendar(session, horizon_days: int = 60):
             elif profile.pay_frequency == "biweekly":
                 pay_date = pay_date + timedelta(days=14)
             else:
-                next_month = pay_date.month % 12 + 1
-                next_year = pay_date.year + (1 if pay_date.month == 12 else 0)
-                day = min(pay_date.day, calendar.monthrange(next_year, next_month)[1])
-                pay_date = date(next_year, next_month, day)
+                pay_date = _next_month_same_day(pay_date)
 
-        end = start + timedelta(days=horizon_days)
         while pay_date <= end:
-            rows.append({
-                "date": pay_date,
-                "event_type": "income",
-                "name": "Paycheck",
-                "amount": float(profile.monthly_amount if profile.pay_frequency == "monthly" else profile.monthly_amount / (4 if profile.pay_frequency == "weekly" else 2)),
-            })
+            paycheck = profile.monthly_amount if profile.pay_frequency == "monthly" else profile.monthly_amount / (4 if profile.pay_frequency == "weekly" else 2)
+            rows.append({"date": pay_date, "event_type": "income", "name": "Paycheck", "amount": float(paycheck)})
             if profile.pay_frequency == "weekly":
                 pay_date = pay_date + timedelta(days=7)
             elif profile.pay_frequency == "biweekly":
                 pay_date = pay_date + timedelta(days=14)
             else:
-                next_month = pay_date.month % 12 + 1
-                next_year = pay_date.year + (1 if pay_date.month == 12 else 0)
-                day = min(pay_date.day, calendar.monthrange(next_year, next_month)[1])
-                pay_date = date(next_year, next_month, day)
+                pay_date = _next_month_same_day(pay_date)
 
     # Bill events
     for bill in bills:
         due = bill.next_due_date or start
         while due < start:
-            next_month = due.month % 12 + 1
-            next_year = due.year + (1 if due.month == 12 else 0)
-            day = min(bill.due_day, calendar.monthrange(next_year, next_month)[1])
-            due = date(next_year, next_month, day)
+            due = _next_month_same_day(due, preferred_day=bill.due_day)
 
-        end = start + timedelta(days=horizon_days)
         if bill.is_recurring:
             cursor = due
             while cursor <= end:
                 rows.append({"date": cursor, "event_type": "bill", "name": bill.name, "amount": -float(bill.amount)})
-                next_month = cursor.month % 12 + 1
-                next_year = cursor.year + (1 if cursor.month == 12 else 0)
-                day = min(bill.due_day, calendar.monthrange(next_year, next_month)[1])
-                cursor = date(next_year, next_month, day)
+                cursor = _next_month_same_day(cursor, preferred_day=bill.due_day)
         elif due <= end:
             rows.append({"date": due, "event_type": "bill", "name": bill.name, "amount": -float(bill.amount)})
 
     if not rows:
-        return pd.DataFrame(columns=["date", "event_type", "name", "amount", "net"]) 
+        return pd.DataFrame(columns=["date", "event_type", "name", "amount", "net"])
 
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"]).dt.date
     daily = df.groupby("date", as_index=False)["amount"].sum().rename(columns={"amount": "net"})
-    out = df.merge(daily, on="date", how="left").sort_values(["date", "event_type", "name"])
-    return out
+    return df.merge(daily, on="date", how="left").sort_values(["date", "event_type", "name"])
+
+
+def build_today_console(session):
+    today = date.today()
+    cal_df = build_income_bill_calendar(session, horizon_days=30)
+    profile = get_or_create_income_profile(session)
+
+    if cal_df.empty:
+        return {
+            "due_7d": 0.0,
+            "income_7d": 0.0,
+            "unpaid_count": 0,
+            "next_paycheck": profile.next_pay_date,
+            "projected_low_balance_30d": profile.current_checking_balance,
+            "negative_risk_30d": 0.0,
+        }
+
+    upcoming = cal_df[cal_df["date"] <= (today + timedelta(days=7))]
+    due_7d = -float(upcoming[upcoming["event_type"] == "bill"]["amount"].sum()) if not upcoming.empty else 0.0
+    income_7d = float(upcoming[upcoming["event_type"] == "income"]["amount"].sum()) if not upcoming.empty else 0.0
+
+    balance = float(profile.current_checking_balance or 0.0)
+    daily_net = cal_df.groupby("date", as_index=False)["net"].first().sort_values("date")
+    cumulative = []
+    for n in daily_net["net"].tolist():
+        balance += float(n)
+        cumulative.append(balance)
+
+    projected_low = min(cumulative) if cumulative else float(profile.current_checking_balance or 0.0)
+    negative_days = sum(1 for b in cumulative if b < 0)
+    negative_risk = (negative_days / len(cumulative)) if cumulative else 0.0
+
+    unpaid_count = len(session.scalars(select(models.Bill).where(models.Bill.is_active == True, models.Bill.is_paid == False)).all())  # noqa: E712
+
+    future_income = cal_df[(cal_df["event_type"] == "income") & (cal_df["date"] >= today)].sort_values("date")
+    next_paycheck = future_income.iloc[0]["date"] if not future_income.empty else profile.next_pay_date
+
+    return {
+        "due_7d": round(due_7d, 2),
+        "income_7d": round(income_7d, 2),
+        "unpaid_count": unpaid_count,
+        "next_paycheck": next_paycheck,
+        "projected_low_balance_30d": round(projected_low, 2),
+        "negative_risk_30d": round(negative_risk, 4),
+    }
