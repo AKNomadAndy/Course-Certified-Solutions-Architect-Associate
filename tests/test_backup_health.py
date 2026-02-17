@@ -1,12 +1,16 @@
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from db import models
 from services.backup import create_db_snapshot, create_encrypted_backup, restore_encrypted_backup
 from services.health import build_health_report, upsert_health_status
 
 
 def test_encrypted_backup_and_restore_roundtrip(tmp_path):
+    pytest.importorskip("cryptography")
+
     db_file = tmp_path / "sample.sqlite3"
     db_file.write_bytes(b"hello-flowledger")
 

@@ -27,6 +27,26 @@ PAGES = {
 }
 
 
+def _render_sidebar_navigation() -> str:
+    st.sidebar.subheader("Quick Navigation")
+
+    if "nav_page" not in st.session_state or st.session_state["nav_page"] not in PAGES:
+        st.session_state["nav_page"] = list(PAGES.keys())[0]
+
+    page_names = list(PAGES.keys())
+    nav_cols = st.sidebar.columns(2)
+    for idx, name in enumerate(page_names):
+        col = nav_cols[idx % 2]
+        if col.button(name, key=f"nav_btn_{name}", use_container_width=True):
+            st.session_state["nav_page"] = name
+            st.rerun()
+
+    st.sidebar.divider()
+    selected = st.sidebar.radio("Navigate", page_names, index=page_names.index(st.session_state["nav_page"]))
+    st.session_state["nav_page"] = selected
+    return selected
+
+
 @st.cache_resource
 def get_session():
     return SessionLocal()
@@ -48,7 +68,7 @@ def main():
     st.sidebar.info("🔒 Personal-use mode (single-user, local data only)")
     st.sidebar.success(f"⏱️ Scheduler active: {scheduler.running}")
 
-    page = st.sidebar.radio("Navigate", list(PAGES.keys()))
+    page = _render_sidebar_navigation()
     PAGES[page](session)
 
 

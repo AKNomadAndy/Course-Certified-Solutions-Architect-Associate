@@ -223,7 +223,7 @@ tests/
 ```
 
 ## Defaults
-- UI layout: left sidebar nav + wide pages + top-level title
+- UI layout: left sidebar nav + quick-navigation buttons + wide pages + top-level title
 - CSV defaults: required `date, description, amount`; optional `account, category, merchant, currency`; also supports card statement schema (`trans_date`, `amount_usd`, `card_last4`, etc.)
 - Rule priority default: 100
 - Simulator default lookback: 90 days
