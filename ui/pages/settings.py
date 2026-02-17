@@ -4,13 +4,28 @@ import streamlit as st
 
 from services.demo_loader import load_demo_data
 from services.imports import ingest_transactions
+from services.user_settings import get_or_create_user_settings, save_user_settings
 
 
 def render(session):
     st.header("Settings & Data")
 
+    st.subheader("Personal Profile")
+    profile = get_or_create_user_settings(session)
+    with st.form("profile_form"):
+        user_name = st.text_input("Display name", value=profile.user_name)
+        base_currency = st.text_input("Base currency", value=profile.base_currency, max_chars=8)
+        submitted = st.form_submit_button("Save profile", type="primary")
+    if submitted:
+        updated = save_user_settings(session, user_name=user_name, base_currency=base_currency)
+        st.success(f"Saved profile for {updated.user_name} ({updated.base_currency})")
+
+    st.caption("Personal-use mode: no auth, no multi-tenant sharing, local dry-run planning only.")
+
+    st.divider()
+    st.subheader("Import Transactions")
     uploads = st.file_uploader("Upload one or more transactions CSV files", accept_multiple_files=True, type=["csv"])
-    if uploads and st.button("Import CSV Files", type="primary"):
+    if uploads and st.button("Import CSV Files"):
         total_created = 0
         file_results = []
         for up in uploads:

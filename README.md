@@ -5,7 +5,7 @@ FlowLedger is a personal-only money router MVP built as an original, dry-run-fir
 ## PRD (Concise)
 
 ### MVP
-- Single-user Streamlit monolith (no auth)
+- Single-user Streamlit monolith (no auth), explicit personal-use profile settings
 - Accounts, Pods (virtual buckets), Liabilities, Income & Bills planner
 - Read-only CSV transaction import (single or multiple files) + manual balances
 - Money Map view (streamlit-agraph, then PyVis fallback, then built-in SVG graph, then table fallback)
@@ -188,5 +188,6 @@ pytest -q
 ```
 
 ## Notes
+- Personal-use mode is intentional: one local profile, no multi-tenant workflow, and local SQLite state.
 - This MVP never initiates real money movement.
 - All outputs are dry-run simulation and manual action suggestions.
