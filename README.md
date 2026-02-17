@@ -23,7 +23,8 @@ FlowLedger is a personal-only money router MVP built as an original, dry-run-fir
 
 ### V2
 - ✅ Multi-currency controls (FX table + forecast/rules-aware conversions)
-- Rule versioning and rollback snapshots
+- ✅ Rule versioning and rollback snapshots
+- ✅ Personal autopilot modes with guardrails (suggest-only / auto-task / internal auto-apply)
 - Package split to API + frontend while keeping service layer unchanged
 
 ## Domain model (entities + examples)
@@ -91,8 +92,9 @@ simulate_rule(rule, events_range):
 
 scheduler_tick():
   build schedule event key for current interval
-  evaluate scheduled rules (dry-run)
-  generate tasks for liability/payment suggestions
+  evaluate scheduled rules (autopilot mode applies)
+  enforce guardrails: checking floor, category daily cap, risk spike pause
+  generate tasks/internal pod allocations based on mode
 ```
 
 ## Streamlit UX map
@@ -133,9 +135,11 @@ scheduler_tick():
 - **Next Actions**
   - Manual checklist with mark done + note + reference id
 - **Settings**
-  - CSV import
+  - Personal profile + base currency
+  - Personal autopilot modes (suggest only / auto-create tasks / auto-apply internal pod allocations)
+  - Guardrails: minimum checking floor, max daily category spend, risk-spike pause threshold
   - FX rates table management for personal multi-currency planning
-  - Idempotent “Load Demo Data”
+  - Multi-file CSV import + idempotent demo loader
   - CSV defaults documented in UI
 
 ## Repo scaffold
@@ -195,4 +199,4 @@ pytest -q
 ## Notes
 - Personal-use mode is intentional: one local profile, no multi-tenant workflow, and local SQLite state.
 - This MVP never initiates real money movement.
-- All outputs are dry-run simulation and manual action suggestions.
+- Outputs support personal autopilot modes with guardrails; no external money movement is ever initiated.

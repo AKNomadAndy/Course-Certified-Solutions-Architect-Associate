@@ -23,6 +23,10 @@ class UserSettings(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_name: Mapped[str] = mapped_column(String(120), default="Personal User")
     base_currency: Mapped[str] = mapped_column(String(8), default="USD")
+    autopilot_mode: Mapped[str] = mapped_column(String(32), default="suggest_only")
+    guardrail_min_checking_floor: Mapped[float] = mapped_column(Float, default=0)
+    guardrail_max_category_daily: Mapped[float | None] = mapped_column(Float, nullable=True)
+    guardrail_risk_pause_threshold: Mapped[float] = mapped_column(Float, default=0.6)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

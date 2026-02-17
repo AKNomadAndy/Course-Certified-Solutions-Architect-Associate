@@ -30,3 +30,7 @@ def init_db() -> None:
     _ensure_column("bills", "is_paid", "is_paid BOOLEAN DEFAULT 0")
     _ensure_column("bills", "last_paid_date", "last_paid_date DATE")
     _ensure_column("rules", "lifecycle_state", "lifecycle_state VARCHAR(16) DEFAULT 'draft'")
+    _ensure_column("user_settings", "autopilot_mode", "autopilot_mode VARCHAR(32) DEFAULT 'suggest_only'")
+    _ensure_column("user_settings", "guardrail_min_checking_floor", "guardrail_min_checking_floor FLOAT DEFAULT 0")
+    _ensure_column("user_settings", "guardrail_max_category_daily", "guardrail_max_category_daily FLOAT")
+    _ensure_column("user_settings", "guardrail_risk_pause_threshold", "guardrail_risk_pause_threshold FLOAT DEFAULT 0.6")

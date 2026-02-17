@@ -5,7 +5,7 @@ import streamlit as st
 from services.demo_loader import load_demo_data
 from services.fx import available_currencies, ensure_default_fx_rates, list_fx_rates, upsert_fx_rate
 from services.imports import ingest_transactions
-from services.user_settings import get_or_create_user_settings, save_user_settings
+from services.user_settings import AUTOPILOT_MODES, get_or_create_user_settings, save_user_settings
 
 
 def render(session):
@@ -22,6 +22,59 @@ def render(session):
         st.success(f"Saved profile for {updated.user_name} ({updated.base_currency})")
 
     st.caption("Personal-use mode: no auth, no multi-tenant sharing, local dry-run planning only.")
+
+    st.divider()
+    st.subheader("Personal Autopilot")
+    mode_labels = {
+        "suggest_only": "Suggest only (no automatic side effects)",
+        "auto_create_tasks": "Auto-create tasks (manual execution checklist)",
+        "auto_apply_internal_allocations": "Auto-apply internal allocations (pods only, no money movement)",
+    }
+    with st.form("autopilot_form"):
+        mode = st.selectbox(
+            "Autopilot mode",
+            list(AUTOPILOT_MODES),
+            index=list(AUTOPILOT_MODES).index(profile.autopilot_mode if profile.autopilot_mode in AUTOPILOT_MODES else "suggest_only"),
+            format_func=lambda x: mode_labels.get(x, x),
+        )
+        c1, c2, c3 = st.columns(3)
+        floor = c1.number_input(
+            "Guardrail: minimum checking floor",
+            min_value=0.0,
+            value=float(profile.guardrail_min_checking_floor or 0.0),
+            step=25.0,
+        )
+        category_cap = c2.number_input(
+            "Guardrail: max daily category spend (0 disables)",
+            min_value=0.0,
+            value=float(profile.guardrail_max_category_daily or 0.0),
+            step=25.0,
+        )
+        risk_pause = c3.slider(
+            "Guardrail: pause when risk spike score >=",
+            min_value=0.0,
+            max_value=1.0,
+            value=float(profile.guardrail_risk_pause_threshold or 0.6),
+            step=0.05,
+        )
+        autopilot_submit = st.form_submit_button("Save autopilot settings")
+
+    if autopilot_submit:
+        updated = save_user_settings(
+            session,
+            user_name=profile.user_name,
+            base_currency=profile.base_currency,
+            autopilot_mode=mode,
+            guardrail_min_checking_floor=floor,
+            guardrail_max_category_daily=category_cap,
+            guardrail_risk_pause_threshold=risk_pause,
+        )
+        st.success(f"Autopilot updated: {mode_labels.get(updated.autopilot_mode, updated.autopilot_mode)}")
+
+    st.info(
+        "Autopilot guardrails are enforced during scheduled runs: checking floor protection, "
+        "category daily cap, and automatic pause on spending risk spikes."
+    )
 
     st.divider()
     st.subheader("Multi-currency FX Controls")

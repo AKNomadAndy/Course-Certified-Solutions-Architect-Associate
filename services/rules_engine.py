@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from sqlalchemy import select
+
+from sqlalchemy import func, select
 
 from db import models
 from services.fx import convert_amount
@@ -61,7 +62,48 @@ def check_condition(
     return False, "unknown condition"
 
 
-def _execute_actions(session, rule: models.Rule, tx: models.Transaction | None, latest_balance: float | None):
+def _risk_spike_score(session) -> float:
+    txs = session.scalars(
+        select(models.Transaction).order_by(models.Transaction.date.desc()).limit(30)
+    ).all()
+    if len(txs) < 10:
+        return 0.0
+
+    negatives = [abs(float(t.amount)) for t in txs if float(t.amount) < 0]
+    if not negatives:
+        return 0.0
+
+    recent = negatives[:7] if len(negatives) >= 7 else negatives
+    baseline = negatives[7:] if len(negatives) > 7 else negatives
+    recent_avg = sum(recent) / max(1, len(recent))
+    baseline_avg = sum(baseline) / max(1, len(baseline))
+    if baseline_avg <= 0:
+        return 0.0
+    score = (recent_avg - baseline_avg) / baseline_avg
+    return max(0.0, min(1.0, float(score)))
+
+
+def _category_daily_total(session, tx: models.Transaction | None) -> float:
+    if not tx or not tx.category or not tx.date:
+        return 0.0
+    total = session.scalar(
+        select(func.sum(func.abs(models.Transaction.amount))).where(
+            models.Transaction.date == tx.date,
+            models.Transaction.category == tx.category,
+            models.Transaction.amount < 0,
+        )
+    )
+    return float(total or 0.0)
+
+
+def _execute_actions(
+    session,
+    rule: models.Rule,
+    tx: models.Transaction | None,
+    latest_balance: float | None,
+    execution_mode: str,
+    min_checking_floor: float,
+):
     allocated = 0.0
     trace_actions = []
     action_rows = []
@@ -76,30 +118,59 @@ def _execute_actions(session, rule: models.Rule, tx: models.Transaction | None, 
         if kind == "allocate_fixed":
             amount = float(action["amount"])
             up_to = action.get("up_to_available", False)
-            available = (latest_balance or 0.0) - allocated
+            available_total = max(0.0, (latest_balance or 0.0) - min_checking_floor)
+            available = available_total - allocated
             actual = min(amount, max(0.0, available)) if up_to else amount
             if up_to and actual <= 0:
                 status = "failed"
-                message = "No available funds"
+                message = "No available funds above floor"
             else:
-                allocated += actual
-                message = f"Allocated {actual} to pod {action['pod_id']}"
-                payload = {"allocated": actual, "pod_id": action.get("pod_id")}
+                # Non-up_to allocations must also respect floor for auto-apply mode.
+                projected_balance = (latest_balance or 0.0) - (allocated + actual)
+                if execution_mode == "auto_apply_internal_allocations" and projected_balance < min_checking_floor:
+                    status = "failed"
+                    message = "Guardrail blocked: minimum checking floor would be breached"
+                else:
+                    allocated += actual
+                    pod_id = int(action.get("pod_id", 0)) if action.get("pod_id") is not None else None
+                    if execution_mode == "auto_apply_internal_allocations" and pod_id:
+                        pod = session.get(models.Pod, pod_id)
+                        if pod:
+                            pod.current_balance = float(pod.current_balance or 0.0) + actual
+                    message = f"Allocated {actual} to pod {action['pod_id']}"
+                    payload = {"allocated": actual, "pod_id": action.get("pod_id")}
         elif kind == "allocate_percent":
             base = abs(tx.amount) if tx else 0.0
             raw = base * (float(action["percent"]) / 100)
             amount = round(raw, 2)
-            allocated += amount
-            leftover = round(base - amount, 2)
-            message = f"Allocated {amount} ({action['percent']}%), leftover {leftover}"
-            payload = {"allocated": amount, "leftover": leftover, "pod_id": action.get("pod_id")}
+            projected_balance = (latest_balance or 0.0) - (allocated + amount)
+            if execution_mode == "auto_apply_internal_allocations" and projected_balance < min_checking_floor:
+                status = "failed"
+                message = "Guardrail blocked: minimum checking floor would be breached"
+            else:
+                allocated += amount
+                leftover = round(base - amount, 2)
+                pod_id = int(action.get("pod_id", 0)) if action.get("pod_id") is not None else None
+                if execution_mode == "auto_apply_internal_allocations" and pod_id:
+                    pod = session.get(models.Pod, pod_id)
+                    if pod:
+                        pod.current_balance = float(pod.current_balance or 0.0) + amount
+                message = f"Allocated {amount} ({action['percent']}%), leftover {leftover}"
+                payload = {"allocated": amount, "leftover": leftover, "pod_id": action.get("pod_id")}
         elif kind == "top_up_pod":
             pod = session.get(models.Pod, int(action["pod_id"]))
             target = float(action["target"])
             need = max(target - (pod.current_balance if pod else 0), 0)
-            allocated += need
-            message = f"Top up suggestion {need}"
-            payload = {"allocated": need, "pod_id": action.get("pod_id")}
+            projected_balance = (latest_balance or 0.0) - (allocated + need)
+            if execution_mode == "auto_apply_internal_allocations" and projected_balance < min_checking_floor:
+                status = "failed"
+                message = "Guardrail blocked: minimum checking floor would be breached"
+            else:
+                allocated += need
+                if execution_mode == "auto_apply_internal_allocations" and pod:
+                    pod.current_balance = float(pod.current_balance or 0.0) + need
+                message = f"Top up suggestion {need}"
+                payload = {"allocated": need, "pod_id": action.get("pod_id")}
         elif kind == "liability_suggestion":
             message = "Task suggested"
             payload = {
@@ -120,16 +191,28 @@ def _execute_actions(session, rule: models.Rule, tx: models.Transaction | None, 
 
 
 def run_rule(session, rule: models.Rule, event: dict, tx: models.Transaction | None = None, dry_run: bool = True):
-    # idempotency: no duplicate persisted runs for same rule+event key
     existing = session.scalar(
         select(models.Run).where(models.Run.rule_id == rule.id, models.Run.event_key == event["event_key"])
     )
     if existing:
         return existing, []
 
-    trace: dict = {"trigger": False, "conditions": [], "actions": [], "dry_run": dry_run}
     settings = get_or_create_user_settings(session)
     base_currency = settings.base_currency or "USD"
+    execution_mode = "suggest_only" if dry_run else (settings.autopilot_mode or "suggest_only")
+    min_floor = float(settings.guardrail_min_checking_floor or 0.0)
+    category_daily_cap = settings.guardrail_max_category_daily
+    risk_threshold = float(settings.guardrail_risk_pause_threshold or 0.6)
+
+    trace: dict = {
+        "trigger": False,
+        "conditions": [],
+        "actions": [],
+        "dry_run": dry_run,
+        "execution_mode": execution_mode,
+        "guardrails": {},
+    }
+
     latest_snapshot = session.scalar(select(models.BalanceSnapshot).order_by(models.BalanceSnapshot.snapshot_at.desc()))
     latest_balance = latest_snapshot.balance if latest_snapshot else None
 
@@ -140,6 +223,28 @@ def run_rule(session, rule: models.Rule, event: dict, tx: models.Transaction | N
         return run, []
 
     trace["trigger"] = True
+
+    risk_score = _risk_spike_score(session)
+    trace["guardrails"]["risk_spike_score"] = risk_score
+    trace["guardrails"]["risk_pause_threshold"] = risk_threshold
+    if not dry_run and risk_score >= risk_threshold:
+        trace["guardrails"]["blocked"] = "risk_spike"
+        run = models.Run(rule_id=rule.id, event_key=event["event_key"], status="guardrail_blocked", trace=trace)
+        session.add(run)
+        session.commit()
+        return run, []
+
+    if not dry_run and category_daily_cap is not None and tx and tx.amount < 0:
+        category_spend = _category_daily_total(session, tx)
+        trace["guardrails"]["category_daily_total"] = category_spend
+        trace["guardrails"]["category_daily_cap"] = float(category_daily_cap)
+        if category_spend > float(category_daily_cap):
+            trace["guardrails"]["blocked"] = "category_daily_cap"
+            run = models.Run(rule_id=rule.id, event_key=event["event_key"], status="guardrail_blocked", trace=trace)
+            session.add(run)
+            session.commit()
+            return run, []
+
     for condition in rule.conditions:
         ok, message = check_condition(session, condition, tx, latest_balance, base_currency=base_currency)
         trace["conditions"].append({"condition": condition, "ok": ok, "message": message})
@@ -149,7 +254,14 @@ def run_rule(session, rule: models.Rule, event: dict, tx: models.Transaction | N
             session.commit()
             return run, []
 
-    status, trace_actions, action_rows = _execute_actions(session, rule, tx, latest_balance)
+    status, trace_actions, action_rows = _execute_actions(
+        session,
+        rule,
+        tx,
+        latest_balance,
+        execution_mode=execution_mode,
+        min_checking_floor=min_floor,
+    )
     trace["actions"] = trace_actions
 
     run = models.Run(rule_id=rule.id, event_key=event["event_key"], status=status, trace=trace)
@@ -162,7 +274,8 @@ def run_rule(session, rule: models.Rule, event: dict, tx: models.Transaction | N
         session.add(result)
         results.append(result)
 
-        if not dry_run and payload.get("task_title"):
+        should_create_task = not dry_run and execution_mode in {"auto_create_tasks", "auto_apply_internal_allocations"}
+        if should_create_task and payload.get("task_title"):
             session.add(
                 models.Task(
                     title=payload["task_title"],
@@ -194,4 +307,4 @@ def evaluate_rules_for_event(session, event: dict, dry_run: bool = True):
 
 def scheduler_tick(session):
     event = {"type": "schedule", "event_key": f"schedule:{datetime.utcnow().strftime('%Y%m%d%H')}"}
-    return evaluate_rules_for_event(session, event, dry_run=True)
+    return evaluate_rules_for_event(session, event, dry_run=False)
