@@ -107,3 +107,13 @@ def test_autopilot_min_floor_blocks_allocation(session):
 
     run, _ = run_rule(session, rule, {"event_key": "ap-floor", "type": "transaction"}, tx, dry_run=False)
     assert run.status == "action_failed"
+
+
+def test_run_trace_includes_explainability_and_rule_fired(session):
+    rule, tx = seed_rule(session, conditions=[])
+    run, _ = run_rule(session, rule, {"event_key": "trace-1", "type": "transaction"}, tx)
+
+    assert "explainability" in run.trace
+    assert "rule_fired" in run.trace
+    assert run.trace["rule_fired"]["base_currency"] == "USD"
+    assert run.trace["explainability"]["confidence_badge"] in {"high", "medium", "low"}

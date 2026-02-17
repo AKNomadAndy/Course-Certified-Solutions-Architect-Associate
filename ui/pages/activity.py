@@ -64,4 +64,20 @@ def render(session):
 
     st.subheader("Latest run explanation")
     if runs:
-        st.json(runs[0].trace)
+        latest_trace = runs[0].trace or {}
+        explain = latest_trace.get("explainability", {})
+        fired = latest_trace.get("rule_fired", {})
+
+        if explain:
+            st.markdown(f"**Why this recommendation?** {explain.get('why_recommendation', 'n/a')}")
+            st.markdown(f"**What if I skip this?** {explain.get('what_if_skip', 'n/a')}")
+            badge = explain.get("confidence_badge", "low")
+            icon = "🟢" if badge == "high" else ("🟡" if badge == "medium" else "🔴")
+            st.caption(f"Rule confidence badge: {icon} {badge.title()}")
+
+        if fired:
+            st.caption(
+                f"Rule fired: #{fired.get('rule_id')} {fired.get('rule_name')} | "
+                f"priority={fired.get('priority')} | base={fired.get('base_currency')}"
+            )
+        st.json(latest_trace)

@@ -5,6 +5,11 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from db import models
+from services.explainability import (
+    build_what_if_skip,
+    build_why_recommendation,
+    confidence_badge_for_rule,
+)
 from services.fx import convert_amount
 from services.user_settings import get_or_create_user_settings
 
@@ -211,12 +216,25 @@ def run_rule(session, rule: models.Rule, event: dict, tx: models.Transaction | N
         "dry_run": dry_run,
         "execution_mode": execution_mode,
         "guardrails": {},
+        "rule_fired": {
+            "rule_id": rule.id,
+            "rule_name": rule.name,
+            "priority": rule.priority,
+            "base_currency": base_currency,
+            "trigger_type": rule.trigger_type,
+            "trigger_config": rule.trigger_config,
+        },
     }
 
     latest_snapshot = session.scalar(select(models.BalanceSnapshot).order_by(models.BalanceSnapshot.snapshot_at.desc()))
     latest_balance = latest_snapshot.balance if latest_snapshot else None
 
     if not trigger_matches(rule, event, tx):
+        trace["explainability"] = {
+            "why_recommendation": build_why_recommendation(False, 0, 0, execution_mode),
+            "what_if_skip": "No action to skip because no recommendation was produced.",
+            "confidence_badge": "high",
+        }
         run = models.Run(rule_id=rule.id, event_key=event["event_key"], status="skipped", trace=trace)
         session.add(run)
         session.commit()
@@ -229,6 +247,11 @@ def run_rule(session, rule: models.Rule, event: dict, tx: models.Transaction | N
     trace["guardrails"]["risk_pause_threshold"] = risk_threshold
     if not dry_run and risk_score >= risk_threshold:
         trace["guardrails"]["blocked"] = "risk_spike"
+        trace["explainability"] = {
+            "why_recommendation": build_why_recommendation(True, 0, 0, execution_mode),
+            "what_if_skip": "Skipping is advised right now because risk guardrails paused execution.",
+            "confidence_badge": confidence_badge_for_rule("guardrail_blocked", risk_spike_score=risk_score),
+        }
         run = models.Run(rule_id=rule.id, event_key=event["event_key"], status="guardrail_blocked", trace=trace)
         session.add(run)
         session.commit()
@@ -240,6 +263,11 @@ def run_rule(session, rule: models.Rule, event: dict, tx: models.Transaction | N
         trace["guardrails"]["category_daily_cap"] = float(category_daily_cap)
         if category_spend > float(category_daily_cap):
             trace["guardrails"]["blocked"] = "category_daily_cap"
+            trace["explainability"] = {
+                "why_recommendation": build_why_recommendation(True, 0, 0, execution_mode),
+                "what_if_skip": "Skipping is advised because category daily spend exceeded your cap.",
+                "confidence_badge": confidence_badge_for_rule("guardrail_blocked", risk_spike_score=risk_score),
+            }
             run = models.Run(rule_id=rule.id, event_key=event["event_key"], status="guardrail_blocked", trace=trace)
             session.add(run)
             session.commit()
@@ -249,6 +277,11 @@ def run_rule(session, rule: models.Rule, event: dict, tx: models.Transaction | N
         ok, message = check_condition(session, condition, tx, latest_balance, base_currency=base_currency)
         trace["conditions"].append({"condition": condition, "ok": ok, "message": message})
         if not ok:
+            trace["explainability"] = {
+                "why_recommendation": build_why_recommendation(True, len(trace["conditions"]), 0, execution_mode),
+                "what_if_skip": "No actions executed because conditions did not pass.",
+                "confidence_badge": confidence_badge_for_rule("condition_failed", risk_spike_score=risk_score),
+            }
             run = models.Run(rule_id=rule.id, event_key=event["event_key"], status="condition_failed", trace=trace)
             session.add(run)
             session.commit()
@@ -263,6 +296,11 @@ def run_rule(session, rule: models.Rule, event: dict, tx: models.Transaction | N
         min_checking_floor=min_floor,
     )
     trace["actions"] = trace_actions
+    trace["explainability"] = {
+        "why_recommendation": build_why_recommendation(True, len(trace["conditions"]), len(trace_actions), execution_mode),
+        "what_if_skip": build_what_if_skip([p for _, _, _, p in action_rows]),
+        "confidence_badge": confidence_badge_for_rule(status, risk_spike_score=risk_score),
+    }
 
     run = models.Run(rule_id=rule.id, event_key=event["event_key"], status=status, trace=trace)
     session.add(run)

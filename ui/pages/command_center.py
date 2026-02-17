@@ -30,10 +30,16 @@ def render(session):
             st.markdown(f"**{item['title']}**")
             st.caption(item["detail"])
             st.caption(f"Impact: {str(item['impact']).upper()}")
+            with st.expander("Why this recommendation?", expanded=False):
+                st.write(item.get("why", "Based on your current rules, tasks, and risk signals."))
+            with st.expander("What if I skip this?", expanded=False):
+                st.write(item.get("skip", "Skipping may delay progress but does not move money automatically."))
 
     st.subheader("This Week's Cash Risk")
     c1, c2, c3 = st.columns(3)
     c1.metric("Risk level", risk["level"].upper())
+    badge = "🟢 High confidence" if risk["level"] == "low" else ("🟡 Medium confidence" if risk["level"] == "medium" else "🔴 Lower confidence")
+    st.caption(f"Forecast confidence badge: {badge}")
     c2.metric("P(Negative) 7d proxy", f"{risk['probability_negative_7d_proxy']:.0%}")
     c3.metric("Safe-to-spend 7d proxy", f"${risk['safe_to_spend_7d_proxy']:.2f}")
 

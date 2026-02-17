@@ -18,7 +18,6 @@ def _forecast_cashflow(transactions: list[models.Transaction], horizon_days: int
     daily = df.groupby("date", as_index=False)["amount"].sum().sort_values("date")
     daily["date"] = pd.to_datetime(daily["date"])
 
-    # Lightweight trend estimate: rolling mean + slope over last 14 days.
     daily["rolling"] = daily["amount"].rolling(7, min_periods=2).mean()
     recent = daily.tail(min(14, len(daily))).copy()
     if len(recent) < 2:
@@ -81,4 +80,17 @@ def render(session):
         with st.expander("Step-by-step trace"):
             for t in report.traces[:60]:
                 st.write(f"Tx {t['transaction_id']}: {t['status']}")
+                explain = (t.get("trace") or {}).get("explainability", {})
+                fired = (t.get("trace") or {}).get("rule_fired", {})
+                if explain:
+                    st.caption(f"Why: {explain.get('why_recommendation', 'n/a')}")
+                    st.caption(f"If skipped: {explain.get('what_if_skip', 'n/a')}")
+                    badge = explain.get("confidence_badge", "low")
+                    icon = "🟢" if badge == "high" else ("🟡" if badge == "medium" else "🔴")
+                    st.caption(f"Confidence: {icon} {badge.title()}")
+                if fired:
+                    st.caption(
+                        f"Rule fired: #{fired.get('rule_id')} {fired.get('rule_name')} "
+                        f"(base {fired.get('base_currency')}, priority {fired.get('priority')})"
+                    )
                 st.json(t["trace"])

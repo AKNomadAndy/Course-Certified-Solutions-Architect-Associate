@@ -20,6 +20,8 @@ def _top_decisions(session) -> list[dict]:
                 "title": "Clear open tasks",
                 "detail": f"You have {open_tasks} open manual tasks pending.",
                 "impact": "high",
+                "why": "Open tasks are unresolved recommendations from prior runs.",
+                "skip": "Skipping increases the chance of missed due dates and manual backlog.",
             }
         )
 
@@ -31,6 +33,8 @@ def _top_decisions(session) -> list[dict]:
                 "title": "Prepare this week's bill coverage",
                 "detail": f"{len(due_soon_bills)} bill(s) due within 7 days totaling ${total_due:.2f}.",
                 "impact": "high",
+                "why": "Known upcoming obligations should be covered first.",
+                "skip": "Skipping can create late-payment risk and fee exposure.",
             }
         )
 
@@ -41,6 +45,8 @@ def _top_decisions(session) -> list[dict]:
                 "title": "Review latest rule execution",
                 "detail": f"Most recent run ended as '{latest_run.status}'. Check Activity for trace details.",
                 "impact": "medium",
+                "why": "A recent rule did not complete successfully and needs review.",
+                "skip": "Skipping may repeat failures on future scheduled ticks.",
             }
         )
 
@@ -52,6 +58,8 @@ def _top_decisions(session) -> list[dict]:
                 "title": "Reduce next-week cash risk",
                 "detail": f"Overdraft probability is elevated ({summary.probability_negative_14d:.0%}).",
                 "impact": "high",
+                "why": "Forecast indicates elevated short-term cash stress.",
+                "skip": "Skipping may increase overdraft likelihood in the next week.",
             }
         )
 
@@ -61,6 +69,8 @@ def _top_decisions(session) -> list[dict]:
                 "title": "Stay on track",
                 "detail": "No urgent financial operations detected today.",
                 "impact": "low",
+                "why": "Current signals look stable today.",
+                "skip": "No urgent downside if you postpone action by a day.",
             }
         )
 

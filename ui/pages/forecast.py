@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from services.explainability import confidence_badge_for_forecast
 from services.forecasting import generate_hybrid_forecast, summarize_forecast
 from services.fx import available_currencies
 from services.user_settings import get_or_create_user_settings
@@ -33,6 +34,22 @@ def render(session):
         m1.metric("P(Negative) 14d", f"{summary.probability_negative_14d:.0%}")
         m2.metric("Expected Min Bal 14d", f"{forecast_currency} {summary.expected_min_balance_14d:,.2f}")
         m3.metric("Safe-to-Spend (14d, P90)", f"{forecast_currency} {summary.safe_to_spend_14d_p90:,.2f}")
+
+        band_width = float((forecast_df["balance_p90"] - forecast_df["balance_p10"]).abs().mean()) if not forecast_df.empty else 0.0
+        confidence = confidence_badge_for_forecast(summary.probability_negative_14d, band_width)
+        badge = "🟢 High" if confidence == "high" else ("🟡 Medium" if confidence == "medium" else "🔴 Low")
+        st.caption(f"Forecast confidence badge: {badge} (avg band width: {band_width:,.2f})")
+
+        with st.expander("Why this recommendation?", expanded=False):
+            st.write(
+                "Forecast combines deterministic income/bills with stochastic transaction behavior; "
+                "safe-to-spend and risk metrics are derived from P10/P50/P90 balance paths."
+            )
+        with st.expander("What if I skip this?", expanded=False):
+            st.write(
+                "If you skip acting on forecast warnings, cash volatility may create avoidable short-term stress. "
+                "No funds are moved automatically in personal mode."
+            )
 
         st.subheader("Balance Confidence Bands")
         chart_df = forecast_df[["date", "balance_p10", "balance_p50", "balance_p90"]].copy()

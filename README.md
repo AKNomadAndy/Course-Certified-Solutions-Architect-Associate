@@ -25,6 +25,7 @@ FlowLedger is a personal-only money router MVP built as an original, dry-run-fir
 - ✅ Multi-currency controls (FX table + forecast/rules-aware conversions)
 - ✅ Rule versioning and rollback snapshots
 - ✅ Personal autopilot modes with guardrails (suggest-only / auto-task / internal auto-apply)
+- ✅ Explainability layer (why recommendation, what-if-skip, rule-fired inputs, confidence badges)
 - Package split to API + frontend while keeping service layer unchanged
 
 ## Domain model (entities + examples)
@@ -103,6 +104,7 @@ scheduler_tick():
   - Today's top 3 decisions
   - This week's cash risk with balance-band chart
   - What changed since yesterday (cash/runs/tasks)
+  - Why this recommendation + what-if-I-skip explainers
   - One-click weekly plan acceptance
 - **Money Map**
   - Graph canvas using `streamlit-agraph`
@@ -135,8 +137,10 @@ scheduler_tick():
   - Stochastic remainder from historical daily behavior
   - P10/P50/P90 balance bands, overdraft risk, and safe-to-spend metric
   - Forecast currency selector with FX-aware stochastic conversion
+  - Forecast confidence badge + explainers
 - **Activity**
   - Run timeline, trace view, CSV export
+  - Human-readable explanation, skip-impact summary, rule-fired context, confidence badge
 - **Next Actions**
   - Manual checklist with mark done + note + reference id
 - **Settings**
