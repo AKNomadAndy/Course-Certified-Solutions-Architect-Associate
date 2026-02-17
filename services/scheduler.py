@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
+from services.health import upsert_health_status
 from services.rules_engine import scheduler_tick
 
 
@@ -36,7 +38,27 @@ except Exception:
 def run_scheduled_tick(session_factory):
     session = session_factory()
     try:
-        scheduler_tick(session)
+        runs = scheduler_tick(session)
+        upsert_health_status(
+            session,
+            "scheduler_heartbeat",
+            {
+                "last_tick_at": datetime.utcnow().isoformat(),
+                "status": "ok",
+                "run_count": len(runs),
+            },
+        )
+    except Exception as exc:
+        upsert_health_status(
+            session,
+            "scheduler_heartbeat",
+            {
+                "last_tick_at": datetime.utcnow().isoformat(),
+                "status": "error",
+                "error": str(exc),
+            },
+        )
+        raise
     finally:
         session.close()
 

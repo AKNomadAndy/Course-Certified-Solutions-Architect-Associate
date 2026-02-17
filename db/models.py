@@ -286,3 +286,11 @@ class MonthlyRetrospective(Base):
     month_key: Mapped[str] = mapped_column(String(7), unique=True)
     summary: Mapped[dict] = mapped_column(JSON, default=dict)
     generated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SystemHealthStatus(Base):
+    __tablename__ = "system_health_status"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(80), unique=True)
+    value: Mapped[dict] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

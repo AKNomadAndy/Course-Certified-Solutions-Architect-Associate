@@ -6,3 +6,4 @@ streamlit-agraph
 pyvis
 pytest
 apscheduler
+cryptography

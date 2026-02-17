@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from services.backup import create_db_snapshot, create_encrypted_backup, latest_backup, list_backups, restore_encrypted_backup
 from services.demo_loader import load_demo_data
 from services.fx import (
     available_currencies,
@@ -44,6 +45,44 @@ def render(session):
         st.success(f"Saved profile for {updated.user_name} ({updated.base_currency})")
 
     st.caption("Personal-use mode: no auth, no multi-tenant sharing, local dry-run planning only.")
+
+    st.divider()
+    st.subheader("Backup & Disaster Recovery")
+    with st.form("backup_form"):
+        passphrase = st.text_input("Backup passphrase", type="password", help="Used to encrypt/decrypt local backup archives.")
+        label = st.text_input("Backup label", value="manual")
+        backup_submit = st.form_submit_button("Create encrypted backup")
+    if backup_submit:
+        try:
+            result = create_encrypted_backup(passphrase=passphrase, label=label)
+            st.success(f"Encrypted backup created: {result.path}")
+        except Exception as exc:
+            st.error(f"Backup failed: {exc}")
+
+    snapshots_col, restore_col = st.columns(2)
+    with snapshots_col:
+        if st.button("Create DB snapshot"):
+            try:
+                snap = create_db_snapshot(reason="manual")
+                st.success(f"Snapshot created: {snap.path}")
+            except Exception as exc:
+                st.error(f"Snapshot failed: {exc}")
+    with restore_col:
+        backup_files = list_backups(limit=20)
+        selected = st.selectbox("Restore from encrypted backup", options=backup_files, index=0 if backup_files else None)
+        restore_passphrase = st.text_input("Restore passphrase", type="password")
+        if st.button("Restore backup", type="primary", disabled=not bool(backup_files)):
+            try:
+                out = restore_encrypted_backup(selected, restore_passphrase, snapshot_before_restore=True)
+                st.success(f"Restore complete. Database restored to {out['restored_to']}")
+                if out.get("snapshot"):
+                    st.caption(f"Pre-restore snapshot: {out['snapshot']}")
+            except Exception as exc:
+                st.error(f"Restore failed: {exc}")
+
+    newest = latest_backup()
+    if newest:
+        st.caption(f"Latest encrypted backup: {newest}")
 
     st.divider()
     st.subheader("Personal Autopilot")
@@ -159,6 +198,10 @@ def render(session):
     st.subheader("Import Transactions")
     uploads = st.file_uploader("Upload one or more transactions CSV files", accept_multiple_files=True, type=["csv"])
     if uploads and st.button("Import CSV Files"):
+        try:
+            create_db_snapshot(reason="before_import")
+        except Exception:
+            pass
         total_created = 0
         quality_rows = []
         for up in uploads:
@@ -201,6 +244,10 @@ def render(session):
                 st.dataframe(pd.DataFrame(row["_anomalies"]), use_container_width=True)
 
     if st.button("Load Demo Data"):
+        try:
+            create_db_snapshot(reason="before_demo_load")
+        except Exception:
+            pass
         load_demo_data(session, ".")
         st.toast("Demo loaded")
         st.success("Demo data is ready. Visit Money Map.")

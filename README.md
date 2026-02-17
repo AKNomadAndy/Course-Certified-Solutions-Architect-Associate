@@ -155,12 +155,18 @@ scheduler_tick():
   - Forecast currency selector with FX-aware stochastic conversion
   - Historical FX snapshot-aware backtesting + +/- shock stress table
   - Forecast confidence badge + explainers
+- **Health**
+  - Scheduler heartbeat and last scheduled-run status
+  - Stale-data warnings (scheduler/import freshness)
+  - Local reliability summary for open tasks and import quality
 - **Activity**
   - Run timeline, trace view, CSV export
   - Human-readable explanation, skip-impact summary, rule-fired context, confidence badge
 - **Next Actions**
   - Manual checklist with mark done + note + reference id
 - **Settings**
+  - Encrypted local backup/export + restore
+  - Automatic DB snapshots before imports/demo-load and pre-restore
   - Historical FX snapshot management
   - Portfolio currency exposure table
   - Import mapping memory by export format
@@ -184,6 +190,8 @@ db/
 schemas/
   domain.py
 services/
+  backup.py
+  health.py
   repositories.py
   imports.py
   rules_engine.py
@@ -193,6 +201,7 @@ services/
   personal_intelligence.py
 ui/pages/
   intelligence.py
+  health.py
   map_view.py
   rules.py
   simulate.py
@@ -235,3 +244,10 @@ pytest -q
 - Personal-use mode is intentional: one local profile, no multi-tenant workflow, and local SQLite state.
 - This MVP never initiates real money movement.
 - Outputs support personal autopilot modes with guardrails; no external money movement is ever initiated.
+
+
+## One-command disaster recovery
+
+```bash
+python scripts/disaster_recovery.py --backup latest --passphrase "<your-passphrase>"
+```
