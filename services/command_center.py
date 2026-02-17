@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+from datetime import date, timedelta
+
+from sqlalchemy import func, select
+
+from db import models
+from services.forecasting import generate_hybrid_forecast, summarize_forecast
+from services.planner import generate_monthly_bill_tasks, list_bills
+
+
+def _top_decisions(session) -> list[dict]:
+    today = date.today()
+    decisions: list[dict] = []
+
+    open_tasks = session.scalar(select(func.count()).select_from(models.Task).where(models.Task.status == "open")) or 0
+    if open_tasks > 0:
+        decisions.append(
+            {
+                "title": "Clear open tasks",
+                "detail": f"You have {open_tasks} open manual tasks pending.",
+                "impact": "high",
+            }
+        )
+
+    due_soon_bills = [b for b in list_bills(session) if (b.next_due_date and 0 <= (b.next_due_date - today).days <= 7)]
+    if due_soon_bills:
+        total_due = round(sum(float(b.amount) for b in due_soon_bills), 2)
+        decisions.append(
+            {
+                "title": "Prepare this week's bill coverage",
+                "detail": f"{len(due_soon_bills)} bill(s) due within 7 days totaling ${total_due:.2f}.",
+                "impact": "high",
+            }
+        )
+
+    latest_run = session.scalar(select(models.Run).order_by(models.Run.created_at.desc()))
+    if latest_run and latest_run.status in {"action_failed", "guardrail_blocked", "condition_failed"}:
+        decisions.append(
+            {
+                "title": "Review latest rule execution",
+                "detail": f"Most recent run ended as '{latest_run.status}'. Check Activity for trace details.",
+                "impact": "medium",
+            }
+        )
+
+    forecast = generate_hybrid_forecast(session, starting_balance=0.0, horizon_days=7)
+    summary = summarize_forecast(forecast)
+    if summary.probability_negative_14d >= 0.25:
+        decisions.append(
+            {
+                "title": "Reduce next-week cash risk",
+                "detail": f"Overdraft probability is elevated ({summary.probability_negative_14d:.0%}).",
+                "impact": "high",
+            }
+        )
+
+    if not decisions:
+        decisions.append(
+            {
+                "title": "Stay on track",
+                "detail": "No urgent financial operations detected today.",
+                "impact": "low",
+            }
+        )
+
+    return decisions[:3]
+
+
+def _weekly_cash_risk(session) -> dict:
+    forecast = generate_hybrid_forecast(session, starting_balance=0.0, horizon_days=7)
+    summary = summarize_forecast(forecast)
+    p_negative = float(summary.probability_negative_14d)
+
+    if p_negative >= 0.6:
+        level = "high"
+    elif p_negative >= 0.3:
+        level = "medium"
+    else:
+        level = "low"
+
+    return {
+        "level": level,
+        "probability_negative_7d_proxy": p_negative,
+        "expected_min_balance_7d_proxy": float(summary.expected_min_balance_14d),
+        "safe_to_spend_7d_proxy": float(summary.safe_to_spend_14d_p90),
+        "forecast": forecast,
+    }
+
+
+def _changes_since_yesterday(session) -> dict:
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+
+    net_today = session.scalar(
+        select(func.sum(models.Transaction.amount)).where(models.Transaction.date == today)
+    )
+    net_yesterday = session.scalar(
+        select(func.sum(models.Transaction.amount)).where(models.Transaction.date == yesterday)
+    )
+
+    runs_today = session.scalar(
+        select(func.count()).select_from(models.Run).where(func.date(models.Run.created_at) == str(today))
+    ) or 0
+    runs_yesterday = session.scalar(
+        select(func.count()).select_from(models.Run).where(func.date(models.Run.created_at) == str(yesterday))
+    ) or 0
+
+    new_tasks_today = session.scalar(
+        select(func.count()).select_from(models.Task).where(func.date(models.Task.created_at) == str(today))
+    ) or 0
+
+    return {
+        "net_today": float(net_today or 0.0),
+        "net_yesterday": float(net_yesterday or 0.0),
+        "net_delta": float((net_today or 0.0) - (net_yesterday or 0.0)),
+        "runs_today": int(runs_today),
+        "runs_yesterday": int(runs_yesterday),
+        "runs_delta": int(runs_today - runs_yesterday),
+        "new_tasks_today": int(new_tasks_today),
+    }
+
+
+def build_command_center(session) -> dict:
+    return {
+        "top_decisions": _top_decisions(session),
+        "weekly_cash_risk": _weekly_cash_risk(session),
+        "changes_since_yesterday": _changes_since_yesterday(session),
+    }
+
+
+def accept_weekly_plan(session) -> dict:
+    created_bill_tasks = generate_monthly_bill_tasks(session)
+    week_ref = f"weekly-plan:{date.today().isocalendar().year}-W{date.today().isocalendar().week:02d}"
+    existing = session.scalar(select(models.Task).where(models.Task.reference_id == week_ref))
+    created = 0
+    if not existing:
+        session.add(
+            models.Task(
+                title="Execute accepted weekly plan",
+                task_type="weekly_plan",
+                note="Weekly command-center plan accepted. Follow top decisions and review Activity mid-week.",
+                reference_id=week_ref,
+            )
+        )
+        created = 1
+    session.commit()
+    return {
+        "created_plan_task": created,
+        "created_bill_tasks": int(created_bill_tasks),
+        "reference_id": week_ref,
+    }

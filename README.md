@@ -99,6 +99,11 @@ scheduler_tick():
 
 ## Streamlit UX map
 
+- **Command Center**
+  - Today's top 3 decisions
+  - This week's cash risk with balance-band chart
+  - What changed since yesterday (cash/runs/tasks)
+  - One-click weekly plan acceptance
 - **Money Map**
   - Graph canvas using `streamlit-agraph`
   - Fallback #1: embedded PyVis interactive graph
@@ -165,6 +170,7 @@ ui/pages/
   activity.py
   tasks_view.py
   settings.py
+  command_center.py
 data/
   demo_transactions.csv
   generate_demo_data.py
