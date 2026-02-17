@@ -51,6 +51,8 @@ def test_percent_rounding_and_up_to(session):
     rule, tx = seed_rule(session, actions=actions, conditions=[])
     _, results = run_rule(session, rule, {"event_key": "e2", "type": "transaction"}, tx)
     assert round(results[0].payload["allocated"], 2) == 66.0
+    assert results[0].payload["base_currency"] == "USD"
+    assert "original_currency" in results[0].payload
     assert results[1].status == "failed"
 
 

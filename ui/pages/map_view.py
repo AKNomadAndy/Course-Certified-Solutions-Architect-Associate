@@ -215,12 +215,14 @@ def _edit_pods(session):
     picked_id = pod_options[selected_label]
     picked = session.get(models.Pod, picked_id)
     new_name = st.text_input("Pod name", value=picked.name, key="edit_pod_name")
+    pod_currency = st.text_input("Currency", value=picked.currency or "USD", key="edit_pod_currency")
     target = st.number_input("Target balance", value=float(picked.target_balance or 0), key="edit_pod_target")
     current = st.number_input("Current balance", value=float(picked.current_balance or 0), key="edit_pod_current")
     if st.button("Save Pod", key="save_pod"):
         picked = session.get(models.Pod, picked_id)
         old = picked.name
         picked.name = new_name.strip()
+        picked.currency = pod_currency.strip().upper() or "USD"
         picked.target_balance = float(target)
         picked.current_balance = float(current)
         node = session.scalar(select(models.MoneyMapNode).where(models.MoneyMapNode.node_type == "pod", models.MoneyMapNode.ref_id == picked.id))
@@ -392,8 +394,9 @@ def render(session):
                 st.success("Added account")
 
             pn = st.text_input("Pod name")
+            pc = st.text_input("Pod currency", value="USD")
             if st.button("Add Pod") and pn:
-                pod = models.Pod(name=pn)
+                pod = models.Pod(name=pn, currency=(pc or "USD").upper())
                 session.add(pod)
                 session.flush()
                 session.add(models.MoneyMapNode(node_type="pod", ref_id=pod.id, label=pod.name))

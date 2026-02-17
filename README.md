@@ -23,6 +23,8 @@ FlowLedger is a personal-only money router MVP built as an original, dry-run-fir
 
 ### V2
 - ✅ Multi-currency controls (FX table + forecast/rules-aware conversions)
+- ✅ Historical FX snapshots + date-aware conversion + FX stress testing
+- ✅ Portfolio exposure by currency + per-account/pod currency policies
 - ✅ Rule versioning and rollback snapshots
 - ✅ Personal autopilot modes with guardrails (suggest-only / auto-task / internal auto-apply)
 - ✅ Explainability layer (why recommendation, what-if-skip, rule-fired inputs, confidence badges)
@@ -34,7 +36,7 @@ FlowLedger is a personal-only money router MVP built as an original, dry-run-fir
 {
   "UserSettings": {"id": 1, "user_name": "Demo User", "base_currency": "USD"},
   "Account": {"id": 1, "name": "Main Checking", "type": "checking", "currency": "USD"},
-  "Pod": {"id": 1, "name": "Essentials", "target_balance": 1000.0, "current_balance": 200.0},
+  "Pod": {"id": 1, "name": "Essentials", "currency": "USD", "target_balance": 1000.0, "current_balance": 200.0},
   "Liability": {"id": 1, "name": "Travel Card", "statement_balance": 650.0, "min_due": 35.0, "due_date": null, "apr": null},
   "Transaction": {"id": 10, "date": "2026-01-10", "description": "Payroll Deposit", "amount": 2200.0, "account": "Main Checking"},
   "BalanceSnapshot": {"id": 1, "source_type": "account", "source_id": 1, "balance": 3400.0},
@@ -107,6 +109,7 @@ scheduler_tick():
   - Why this recommendation + what-if-I-skip explainers
   - One-click weekly plan acceptance
 - **Money Map**
+  - Per-account and per-pod currency policies
   - Graph canvas using `streamlit-agraph`
   - Fallback #1: embedded PyVis interactive graph
   - Fallback #2: built-in SVG graph (no extra deps)
@@ -137,6 +140,7 @@ scheduler_tick():
   - Stochastic remainder from historical daily behavior
   - P10/P50/P90 balance bands, overdraft risk, and safe-to-spend metric
   - Forecast currency selector with FX-aware stochastic conversion
+  - Historical FX snapshot-aware backtesting + +/- shock stress table
   - Forecast confidence badge + explainers
 - **Activity**
   - Run timeline, trace view, CSV export
@@ -144,6 +148,8 @@ scheduler_tick():
 - **Next Actions**
   - Manual checklist with mark done + note + reference id
 - **Settings**
+  - Historical FX snapshot management
+  - Portfolio currency exposure table
   - Personal profile + base currency
   - Personal autopilot modes (suggest only / auto-create tasks / auto-apply internal pod allocations)
   - Guardrails: minimum checking floor, max daily category spend, risk-spike pause threshold

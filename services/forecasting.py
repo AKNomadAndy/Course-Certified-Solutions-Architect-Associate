@@ -56,7 +56,7 @@ def _build_deterministic_schedule(start: date, horizon_days: int, monthly_income
     return df
 
 
-def _stochastic_remainder_estimate(session, base_currency: str):
+def _stochastic_remainder_estimate(session, base_currency: str, stress_pct: float = 0.0):
     txs = session.scalars(select(models.Transaction).order_by(models.Transaction.date)).all()
     if not txs:
         return {"weekday_mean": {i: 0.0 for i in range(7)}, "q10": 0.0, "q50": 0.0, "q90": 0.0}
@@ -66,7 +66,14 @@ def _stochastic_remainder_estimate(session, base_currency: str):
         rows.append(
             {
                 "date": t.date,
-                "amount": convert_amount(session, t.amount, from_currency=t.currency or base_currency, to_currency=base_currency),
+                "amount": convert_amount(
+                    session,
+                    t.amount,
+                    from_currency=t.currency or base_currency,
+                    to_currency=base_currency,
+                    at_date=t.date,
+                    stress_pct=stress_pct,
+                ),
             }
         )
 
@@ -86,14 +93,20 @@ def _stochastic_remainder_estimate(session, base_currency: str):
     return {"weekday_mean": weekday_mean, "q10": q10, "q50": q50, "q90": q90}
 
 
-def generate_hybrid_forecast(session, starting_balance: float = 0.0, horizon_days: int = 30, base_currency: str | None = None):
+def generate_hybrid_forecast(
+    session,
+    starting_balance: float = 0.0,
+    horizon_days: int = 30,
+    base_currency: str | None = None,
+    fx_stress_pct: float = 0.0,
+):
     start = date.today()
     settings = get_or_create_user_settings(session)
     fx_base = (base_currency or settings.base_currency or "USD").upper()
 
     monthly_income, pay_frequency, bills = _load_income_and_bills(session)
     det = _build_deterministic_schedule(start, horizon_days, monthly_income, pay_frequency, bills)
-    stochastic = _stochastic_remainder_estimate(session, base_currency=fx_base)
+    stochastic = _stochastic_remainder_estimate(session, base_currency=fx_base, stress_pct=fx_stress_pct)
 
     det["weekday"] = pd.to_datetime(det["date"]).dt.weekday
     det["stochastic_mean"] = det["weekday"].map(stochastic["weekday_mean"]).fillna(0.0)
@@ -107,8 +120,43 @@ def generate_hybrid_forecast(session, starting_balance: float = 0.0, horizon_day
 
     det["p_negative"] = ((det["balance_p10"] < 0).astype(float) * 0.9 + (det["balance_p50"] < 0).astype(float) * 0.5) / 1.4
     det["currency"] = fx_base
+    det["fx_stress_pct"] = fx_stress_pct
 
-    return det[["date", "deterministic_net", "net_p10", "net_p50", "net_p90", "balance_p10", "balance_p50", "balance_p90", "p_negative", "currency"]]
+    return det[[
+        "date",
+        "deterministic_net",
+        "net_p10",
+        "net_p50",
+        "net_p90",
+        "balance_p10",
+        "balance_p50",
+        "balance_p90",
+        "p_negative",
+        "currency",
+        "fx_stress_pct",
+    ]]
+
+
+def generate_fx_stress_table(session, starting_balance: float, horizon_days: int, base_currency: str, shocks: list[float]):
+    rows = []
+    for shock in shocks:
+        fc = generate_hybrid_forecast(
+            session,
+            starting_balance=starting_balance,
+            horizon_days=horizon_days,
+            base_currency=base_currency,
+            fx_stress_pct=shock,
+        )
+        s = summarize_forecast(fc)
+        rows.append(
+            {
+                "fx_shock_pct": round(shock * 100, 2),
+                "p_negative_14d": s.probability_negative_14d,
+                "min_balance_14d": s.expected_min_balance_14d,
+                "safe_to_spend_14d": s.safe_to_spend_14d_p90,
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def summarize_forecast(forecast_df: pd.DataFrame) -> ForecastSummary:

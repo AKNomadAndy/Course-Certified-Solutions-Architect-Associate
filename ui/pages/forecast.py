@@ -3,23 +3,24 @@ from __future__ import annotations
 import streamlit as st
 
 from services.explainability import confidence_badge_for_forecast
-from services.forecasting import generate_hybrid_forecast, summarize_forecast
+from services.forecasting import generate_fx_stress_table, generate_hybrid_forecast, summarize_forecast
 from services.fx import available_currencies
 from services.user_settings import get_or_create_user_settings
 
 
 def render(session):
     st.header("Cashflow Forecast")
-    st.caption("Hybrid deterministic + stochastic forecast with multi-currency conversion controls.")
+    st.caption("Hybrid deterministic + stochastic forecast with multi-currency conversion controls and FX stress scenarios.")
 
     settings = get_or_create_user_settings(session)
     currencies = available_currencies(session)
     default_idx = currencies.index(settings.base_currency) if settings.base_currency in currencies else 0
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     starting_balance = c1.number_input("Starting balance", value=0.0, step=50.0)
     horizon_days = c2.number_input("Horizon days", min_value=14, max_value=90, value=30)
     forecast_currency = c3.selectbox("Forecast currency", currencies, index=default_idx)
+    fx_stress_pct = c4.slider("FX stress (%)", min_value=-30, max_value=30, value=0, step=5)
 
     if st.button("Run Forecast", type="primary"):
         forecast_df = generate_hybrid_forecast(
@@ -27,6 +28,7 @@ def render(session):
             starting_balance=starting_balance,
             horizon_days=int(horizon_days),
             base_currency=forecast_currency,
+            fx_stress_pct=float(fx_stress_pct) / 100.0,
         )
         summary = summarize_forecast(forecast_df)
 
@@ -59,6 +61,16 @@ def render(session):
         st.subheader("Daily Overdraft Risk")
         risk_df = forecast_df[["date", "p_negative"]].set_index("date")
         st.area_chart(risk_df)
+
+        st.subheader("FX Stress Test")
+        stress_df = generate_fx_stress_table(
+            session,
+            starting_balance=float(starting_balance),
+            horizon_days=int(horizon_days),
+            base_currency=forecast_currency,
+            shocks=[-0.1, 0.0, 0.1],
+        )
+        st.dataframe(stress_df, use_container_width=True)
 
         st.subheader("Forecast Detail")
         st.dataframe(forecast_df, use_container_width=True)

@@ -46,11 +46,11 @@ def check_condition(
     now = now or datetime.utcnow()
     ctype = condition.get("type")
     if ctype == "amount_gte":
-        tx_amount = convert_amount(session, tx.amount, tx.currency or base_currency, base_currency) if tx else None
+        tx_amount = convert_amount(session, tx.amount, tx.currency or base_currency, base_currency, at_date=tx.date if tx else None) if tx else None
         ok = tx is not None and float(tx_amount) >= float(condition["value"])
         return ok, f"amount {round(float(tx_amount), 2) if tx else 'n/a'} {base_currency} >= {condition['value']}"
     if ctype == "amount_lte":
-        tx_amount = convert_amount(session, tx.amount, tx.currency or base_currency, base_currency) if tx else None
+        tx_amount = convert_amount(session, tx.amount, tx.currency or base_currency, base_currency, at_date=tx.date if tx else None) if tx else None
         ok = tx is not None and float(tx_amount) <= float(condition["value"])
         return ok, f"amount {round(float(tx_amount), 2) if tx else 'n/a'} {base_currency} <= {condition['value']}"
     if ctype == "currency_eq":
@@ -108,6 +108,7 @@ def _execute_actions(
     latest_balance: float | None,
     execution_mode: str,
     min_checking_floor: float,
+    base_currency: str,
 ):
     allocated = 0.0
     trace_actions = []
@@ -143,7 +144,14 @@ def _execute_actions(
                         if pod:
                             pod.current_balance = float(pod.current_balance or 0.0) + actual
                     message = f"Allocated {actual} to pod {action['pod_id']}"
-                    payload = {"allocated": actual, "pod_id": action.get("pod_id")}
+                    payload = {
+                        "allocated": actual,
+                        "allocated_base": actual,
+                        "base_currency": base_currency,
+                        "original_amount": actual,
+                        "original_currency": base_currency,
+                        "pod_id": action.get("pod_id"),
+                    }
         elif kind == "allocate_percent":
             base = abs(tx.amount) if tx else 0.0
             raw = base * (float(action["percent"]) / 100)
@@ -161,7 +169,23 @@ def _execute_actions(
                     if pod:
                         pod.current_balance = float(pod.current_balance or 0.0) + amount
                 message = f"Allocated {amount} ({action['percent']}%), leftover {leftover}"
-                payload = {"allocated": amount, "leftover": leftover, "pod_id": action.get("pod_id")}
+                original_currency = (tx.currency if tx and tx.currency else base_currency).upper()
+                allocated_base = convert_amount(
+                    session,
+                    amount,
+                    from_currency=original_currency,
+                    to_currency=base_currency,
+                    at_date=tx.date if tx else None,
+                )
+                payload = {
+                    "allocated": amount,
+                    "allocated_base": round(float(allocated_base), 2),
+                    "base_currency": base_currency,
+                    "original_amount": amount,
+                    "original_currency": original_currency,
+                    "leftover": leftover,
+                    "pod_id": action.get("pod_id"),
+                }
         elif kind == "top_up_pod":
             pod = session.get(models.Pod, int(action["pod_id"]))
             target = float(action["target"])
@@ -175,12 +199,21 @@ def _execute_actions(
                 if execution_mode == "auto_apply_internal_allocations" and pod:
                     pod.current_balance = float(pod.current_balance or 0.0) + need
                 message = f"Top up suggestion {need}"
-                payload = {"allocated": need, "pod_id": action.get("pod_id")}
+                payload = {
+                    "allocated": need,
+                    "allocated_base": need,
+                    "base_currency": base_currency,
+                    "original_amount": need,
+                    "original_currency": base_currency,
+                    "pod_id": action.get("pod_id"),
+                }
         elif kind == "liability_suggestion":
             message = "Task suggested"
             payload = {
                 "task_title": action.get("title", "Pay liability"),
                 "task_note": action.get("note"),
+                "base_currency": base_currency,
+                "original_currency": (tx.currency if tx and tx.currency else base_currency).upper(),
             }
         else:
             status = "failed"
@@ -294,6 +327,7 @@ def run_rule(session, rule: models.Rule, event: dict, tx: models.Transaction | N
         latest_balance,
         execution_mode=execution_mode,
         min_checking_floor=min_floor,
+        base_currency=base_currency,
     )
     trace["actions"] = trace_actions
     trace["explainability"] = {

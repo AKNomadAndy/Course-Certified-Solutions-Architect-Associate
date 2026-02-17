@@ -45,6 +45,7 @@ class Pod(Base):
     __tablename__ = "pods"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(120), unique=True)
+    currency: Mapped[str] = mapped_column(String(8), default="USD")
     target_balance: Mapped[float] = mapped_column(Float, default=0)
     current_balance: Mapped[float] = mapped_column(Float, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -194,6 +195,19 @@ class FxRate(Base):
     source: Mapped[str] = mapped_column(String(40), default="manual")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     __table_args__ = (UniqueConstraint("base_currency", "quote_currency", name="uq_fx_pair"),)
+
+
+class FxRateSnapshot(Base):
+    __tablename__ = "fx_rate_snapshots"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    base_currency: Mapped[str] = mapped_column(String(8))
+    quote_currency: Mapped[str] = mapped_column(String(8))
+    rate: Mapped[float] = mapped_column(Float)
+    snapshot_date: Mapped[date] = mapped_column(Date)
+    source: Mapped[str] = mapped_column(String(40), default="manual")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("base_currency", "quote_currency", "snapshot_date", name="uq_fx_pair_snapshot_date"),)
 
 
 class IncomeProfile(Base):

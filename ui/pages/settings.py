@@ -3,7 +3,15 @@ from __future__ import annotations
 import streamlit as st
 
 from services.demo_loader import load_demo_data
-from services.fx import available_currencies, ensure_default_fx_rates, list_fx_rates, upsert_fx_rate
+from services.fx import (
+    available_currencies,
+    currency_exposure,
+    ensure_default_fx_rates,
+    list_fx_rates,
+    list_fx_snapshots,
+    upsert_fx_rate,
+    upsert_fx_snapshot,
+)
 from services.imports import ingest_transactions
 from services.user_settings import AUTOPILOT_MODES, get_or_create_user_settings, save_user_settings
 
@@ -110,7 +118,42 @@ def render(session):
     else:
         st.info("No FX rates yet. Add a pair to enable cross-currency controls in forecasting and rules.")
 
+    with st.form("fx_snapshot_form"):
+        s1, s2, s3, s4 = st.columns(4)
+        snap_base = s1.text_input("Snapshot from", value="USD", max_chars=8)
+        snap_quote = s2.text_input("Snapshot to", value="EUR", max_chars=8)
+        snap_rate = s3.number_input("Snapshot rate", min_value=0.000001, value=0.92, step=0.01, format="%.6f")
+        snap_date = s4.date_input("Snapshot date")
+        snap_submit = st.form_submit_button("Save FX Snapshot")
+    if snap_submit:
+        snap = upsert_fx_snapshot(session, snap_base, snap_quote, snap_rate, snap_date)
+        st.success(f"Saved historical FX {snap.base_currency}->{snap.quote_currency} @ {snap.rate:.6f} for {snap.snapshot_date}")
+
+    snapshots = list_fx_snapshots(session)
+    if snapshots:
+        st.caption("Historical FX snapshots")
+        st.dataframe(
+            [
+                {
+                    "date": s.snapshot_date,
+                    "base": s.base_currency,
+                    "quote": s.quote_currency,
+                    "rate": s.rate,
+                    "source": s.source,
+                }
+                for s in snapshots[:120]
+            ],
+            use_container_width=True,
+        )
+
     st.caption(f"Available currencies: {', '.join(available_currencies(session))}")
+
+    st.subheader("Portfolio Currency Exposure")
+    exposure_rows = currency_exposure(session, base_currency=profile.base_currency)
+    if exposure_rows:
+        st.dataframe(exposure_rows, use_container_width=True)
+    else:
+        st.info("No account/pod balances available for exposure view yet.")
 
     st.divider()
     st.subheader("Import Transactions")
