@@ -281,18 +281,66 @@ def _edit_liabilities(session):
         session.commit()
         st.success("Liability deleted")
 
+def _edit_edges(session):
+    nodes = session.scalars(select(models.MoneyMapNode).order_by(models.MoneyMapNode.label)).all()
+    edges = session.scalars(select(models.MoneyMapEdge).order_by(models.MoneyMapEdge.id)).all()
+    if len(nodes) < 2:
+        st.info("Add at least two nodes to manage edges.")
+        return
+
+    node_options = {f"{n.label} ({n.node_type} #{n.id})": n.id for n in nodes}
+
+    st.markdown("**Create edge**")
+    c1, c2, c3 = st.columns(3)
+    source_label = c1.selectbox("From", list(node_options.keys()), key="edge_create_from")
+    target_label = c2.selectbox("To", list(node_options.keys()), key="edge_create_to")
+    edge_label = c3.text_input("Label", value="routes to", key="edge_create_label")
+    if st.button("Add Edge", key="edge_create_btn"):
+        source_id = node_options[source_label]
+        target_id = node_options[target_label]
+        if source_id == target_id:
+            st.error("Source and target must be different nodes.")
+        else:
+            session.add(models.MoneyMapEdge(source_node_id=source_id, target_node_id=target_id, label=edge_label.strip() or "routes to"))
+            session.commit()
+            st.success("Edge added")
+
+    st.markdown("**Edit / delete edge**")
+    if not edges:
+        st.info("No edges yet.")
+        return
+
+    edge_options = {f"Edge #{e.id}: {e.source_node_id} -> {e.target_node_id} ({e.label})": e.id for e in edges}
+    picked_label = st.selectbox("Select edge", list(edge_options.keys()), key="edge_pick")
+    picked = session.get(models.MoneyMapEdge, edge_options[picked_label])
+
+    e1, e2, e3 = st.columns(3)
+    new_source = e1.selectbox("New from", list(node_options.keys()), index=list(node_options.values()).index(picked.source_node_id), key="edge_edit_from")
+    new_target = e2.selectbox("New to", list(node_options.keys()), index=list(node_options.values()).index(picked.target_node_id), key="edge_edit_to")
+    new_label = e3.text_input("New label", value=picked.label or "routes to", key="edge_edit_label")
+
+    s_col, d_col = st.columns(2)
+    if s_col.button("Save Edge", key="edge_save_btn"):
+        picked = session.get(models.MoneyMapEdge, edge_options[picked_label])
+        picked.source_node_id = node_options[new_source]
+        picked.target_node_id = node_options[new_target]
+        picked.label = new_label.strip() or "routes to"
+        session.commit()
+        st.success("Edge updated")
+
+    if d_col.button("Delete Edge", key="edge_delete_btn"):
+        picked = session.get(models.MoneyMapEdge, edge_options[picked_label])
+        session.delete(picked)
+        session.commit()
+        st.success("Edge deleted")
+
+
 def render(session):
     st.header("Money Map")
     nodes = session.scalars(select(models.MoneyMapNode)).all()
     edges = session.scalars(select(models.MoneyMapEdge)).all()
 
     _render_overview(nodes, edges)
-
-    if st.button("Create quick edge"):
-        if len(nodes) >= 2:
-            session.add(models.MoneyMapEdge(source_node_id=nodes[0].id, target_node_id=nodes[1].id, label="manual"))
-            session.commit()
-            st.success("Edge created")
 
     rendered = False
     errors: list[str] = []
@@ -364,10 +412,12 @@ def render(session):
 
         with edit_col:
             st.markdown("**Edit Existing**")
-            t1, t2, t3 = st.tabs(["Accounts", "Pods", "Liabilities"])
+            t1, t2, t3, t4 = st.tabs(["Accounts", "Pods", "Liabilities", "Edges"])
             with t1:
                 _edit_accounts(session)
             with t2:
                 _edit_pods(session)
             with t3:
                 _edit_liabilities(session)
+            with t4:
+                _edit_edges(session)

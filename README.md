@@ -17,9 +17,9 @@ FlowLedger is a personal-only money router MVP built as an original, dry-run-fir
 - Demo Mode idempotent loader with seeded entities, 60+ tx, 8+ rules
 
 ### V1
-- Better rule templates and richer condition builder UI
-- Scheduled background tick via APScheduler in-app
-- Better graph editing (inline edge/rule editing)
+- ✅ Better rule templates and richer condition builder UI
+- ✅ Scheduled background tick via APScheduler in-app
+- ✅ Better graph editing (inline edge/rule editing)
 
 ### V2
 - Multi-currency controls
@@ -103,6 +103,7 @@ scheduler_tick():
   - Fallback #2: built-in SVG graph (no extra deps)
   - Fallback #3: node table + adjacency list
   - Quick create for account/pod/liability + map nodes
+  - Inline edge create/edit/delete manager
   - Edit/delete accounts, pods, liabilities in-place (including Main Checking rename)
 - **Income & Bills**
   - Enter monthly income and pay frequency with recurring toggle
@@ -116,7 +117,7 @@ scheduler_tick():
   - View debt payoff schedule projection with monthly trend and interest summary
 - **Rule Builder**
   - Trigger selector (transaction/schedule/manual)
-  - JSON-based condition/action wizard for MVP speed
+  - JSON-based condition/action wizard + quick templates + no-code helper
   - Clean editor with create/update/delete + enabled toggle + simulate latest transaction
 - **Simulator**
   - Rule picker + lookback days (default 90)

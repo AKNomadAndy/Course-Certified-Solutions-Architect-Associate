@@ -3,6 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from db.engine import SessionLocal, init_db
+from services.scheduler import start_local_scheduler
 from services.user_settings import get_or_create_user_settings
 from ui.pages import activity, forecast, map_view, planner, rules, settings, simulate, tasks_view
 
@@ -27,12 +28,22 @@ def get_session():
     return SessionLocal()
 
 
+@st.cache_resource
+def get_scheduler():
+    return start_local_scheduler(SessionLocal)
+
+
 def main():
     st.title("FlowLedger")
     session = get_session()
     profile = get_or_create_user_settings(session)
+
+    scheduler = get_scheduler()
+
     st.caption(f"Personal money routing simulator for {profile.user_name} (dry-run only)")
     st.sidebar.info("🔒 Personal-use mode (single-user, local data only)")
+    st.sidebar.success(f"⏱️ Scheduler active: {scheduler.running}")
+
     page = st.sidebar.radio("Navigate", list(PAGES.keys()))
     PAGES[page](session)
 

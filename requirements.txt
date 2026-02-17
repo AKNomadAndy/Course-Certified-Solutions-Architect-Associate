@@ -5,3 +5,4 @@ pydantic
 streamlit-agraph
 pyvis
 pytest
+apscheduler
