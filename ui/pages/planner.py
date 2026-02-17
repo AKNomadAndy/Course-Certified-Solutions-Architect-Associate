@@ -15,6 +15,7 @@ from services.planner import (
     generate_monthly_bill_tasks,
     get_or_create_income_profile,
     list_bills,
+    load_personal_bill_and_debt_pack,
     mark_bill_paid,
     monthly_plan_summary,
     reset_bill_paid_flags,
@@ -53,6 +54,15 @@ def _render_weekly_actions(session):
 def render(session):
     st.header("Income & Bills Planner")
     st.caption("Personal cash operating system: recurring income/bills, weekly actions, debt payoff, and what-if planning.")
+
+    with st.container(border=True):
+        st.subheader("One-Click Personal Bill & Debt Pack")
+        st.caption("Load your full provided recurring bill/debt list with defaults in one step.")
+        if st.button("Load My Full Bill & Debt List", type="primary"):
+            loaded = load_personal_bill_and_debt_pack(session)
+            st.success(
+                f"Loaded defaults: income ${loaded['income']:.2f}, bills {loaded['bills_loaded']}, liabilities {loaded['liabilities_loaded']}."
+            )
 
     _render_today_console(session)
     _render_weekly_actions(session)

@@ -135,6 +135,7 @@ scheduler_tick():
   - Visual calendar timeline of upcoming income and bills
   - Visualize due-day load + category mix + remaining cash
   - Generate current-month bill tasks
+  - One-click load of your full provided bill + debt list
   - Generate debt reduction/payment plan from liabilities + remaining cash
   - View debt payoff schedule projection with monthly trend and interest summary
 - **Rule Builder**

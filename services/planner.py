@@ -12,6 +12,30 @@ from db import models
 PAY_DAYS = {"weekly": 7, "biweekly": 14, "monthly": None}
 
 
+PERSONAL_BILL_PACK = [
+    {"name": "Rent", "amount": 1228.00, "due_day": 1, "category": "Housing", "autopay": False, "is_recurring": True},
+    {"name": "Water", "amount": 41.00, "due_day": 15, "category": "Utilities", "autopay": False, "is_recurring": True},
+    {"name": "Electric (SRP)", "amount": 60.00, "due_day": 10, "category": "Utilities", "autopay": False, "is_recurring": True},
+    {"name": "Internet (Cox)", "amount": 190.00, "due_day": 17, "category": "Utilities", "autopay": False, "is_recurring": True},
+    {"name": "Google One", "amount": 20.00, "due_day": 20, "category": "Subscriptions", "autopay": True, "is_recurring": True},
+    {"name": "Just Insure", "amount": 65.00, "due_day": 14, "category": "Insurance", "autopay": False, "is_recurring": True},
+    {"name": "Medical Expense", "amount": 111.98, "due_day": 24, "category": "Debt", "autopay": False, "is_recurring": True},
+    {"name": "Bridgecrest (Car)", "amount": 300.00, "due_day": 18, "category": "Auto", "autopay": False, "is_recurring": True},
+    {"name": "Capital One Minimum", "amount": 35.00, "due_day": 25, "category": "Debt", "autopay": False, "is_recurring": True},
+]
+
+
+PERSONAL_LIABILITY_PACK = [
+    {"name": "Affirm - Expedia", "statement_balance": 684.30, "min_due": 136.86, "due_day": 1, "apr": None},
+    {"name": "Affirm - American Airlines", "statement_balance": 1453.14, "min_due": 80.73, "due_day": 4, "apr": None},
+    {"name": "Affirm - Valerion", "statement_balance": 4620.75, "min_due": 308.05, "due_day": 7, "apr": None},
+    {"name": "Affirm - SeatGeek", "statement_balance": 865.48, "min_due": 61.82, "due_day": 24, "apr": None},
+    {"name": "Medical Expense", "statement_balance": 614.86, "min_due": 111.98, "due_day": 24, "apr": None},
+    {"name": "Capital One Card", "statement_balance": 1877.32, "min_due": 35.00, "due_day": 25, "apr": None},
+    {"name": "Bridgecrest (Car)", "statement_balance": 0.0, "min_due": 300.00, "due_day": 18, "apr": None},
+]
+
+
 def get_or_create_income_profile(session):
     profile = session.scalar(select(models.IncomeProfile).where(models.IncomeProfile.name == "Primary Income"))
     if not profile:
@@ -107,6 +131,59 @@ def reset_bill_paid_flags(session):
 
 def list_bills(session):
     return session.scalars(select(models.Bill).where(models.Bill.is_active == True).order_by(models.Bill.due_day, models.Bill.name)).all()  # noqa: E712
+
+
+def load_personal_bill_and_debt_pack(session):
+    profile = save_income_profile(
+        session,
+        monthly_amount=4060.90,
+        pay_frequency="biweekly",
+        next_pay_date=date.today().replace(day=min(3, calendar.monthrange(date.today().year, date.today().month)[1])),
+        current_checking_balance=float(get_or_create_income_profile(session).current_checking_balance or 0.0),
+        is_recurring=True,
+    )
+
+    bill_count = 0
+    for item in PERSONAL_BILL_PACK:
+        add_bill(
+            session,
+            name=item["name"],
+            amount=float(item["amount"]),
+            due_day=int(item["due_day"]),
+            category=item["category"],
+            autopay=bool(item["autopay"]),
+            next_due_date=date(date.today().year, date.today().month, min(int(item["due_day"]), calendar.monthrange(date.today().year, date.today().month)[1])),
+            is_recurring=bool(item["is_recurring"]),
+        )
+        bill_count += 1
+
+    liability_count = 0
+    for item in PERSONAL_LIABILITY_PACK:
+        due_date = date(date.today().year, date.today().month, min(int(item["due_day"]), calendar.monthrange(date.today().year, date.today().month)[1]))
+        existing = session.scalar(select(models.Liability).where(models.Liability.name == item["name"]))
+        if existing:
+            existing.statement_balance = float(item["statement_balance"])
+            existing.min_due = float(item["min_due"])
+            existing.due_date = due_date
+            existing.apr = item["apr"]
+        else:
+            session.add(
+                models.Liability(
+                    name=item["name"],
+                    statement_balance=float(item["statement_balance"]),
+                    min_due=float(item["min_due"]),
+                    due_date=due_date,
+                    apr=item["apr"],
+                )
+            )
+        liability_count += 1
+
+    session.commit()
+    return {
+        "income": float(profile.monthly_amount),
+        "bills_loaded": bill_count,
+        "liabilities_loaded": liability_count,
+    }
 
 
 def monthly_plan_summary(session):
