@@ -4,6 +4,8 @@ from datetime import datetime
 from sqlalchemy import select
 
 from db import models
+from services.fx import convert_amount
+from services.user_settings import get_or_create_user_settings
 
 
 def sort_rules(rules: list[models.Rule]) -> list[models.Rule]:
@@ -18,26 +20,38 @@ def trigger_matches(rule: models.Rule, event: dict, tx: models.Transaction | Non
         if etype != "transaction" or not tx:
             return False
         contains = rule.trigger_config.get("description_contains")
-        return contains.lower() in tx.description.lower() if contains else True
+        wanted_currency = (rule.trigger_config.get("currency") or "").upper()
+        currency_ok = True if not wanted_currency else (tx.currency or "").upper() == wanted_currency
+        contains_ok = contains.lower() in tx.description.lower() if contains else True
+        return contains_ok and currency_ok
     if rule.trigger_type == "schedule":
         return etype == "schedule"
     return False
 
 
 def check_condition(
+    session,
     condition: dict,
     tx: models.Transaction | None,
     latest_balance: float | None,
+    base_currency: str = "USD",
     now: datetime | None = None,
 ) -> tuple[bool, str]:
     now = now or datetime.utcnow()
     ctype = condition.get("type")
     if ctype == "amount_gte":
-        ok = tx is not None and tx.amount >= float(condition["value"])
-        return ok, f"amount {tx.amount if tx else 'n/a'} >= {condition['value']}"
+        tx_amount = convert_amount(session, tx.amount, tx.currency or base_currency, base_currency) if tx else None
+        ok = tx is not None and float(tx_amount) >= float(condition["value"])
+        return ok, f"amount {round(float(tx_amount), 2) if tx else 'n/a'} {base_currency} >= {condition['value']}"
     if ctype == "amount_lte":
-        ok = tx is not None and tx.amount <= float(condition["value"])
-        return ok, f"amount {tx.amount if tx else 'n/a'} <= {condition['value']}"
+        tx_amount = convert_amount(session, tx.amount, tx.currency or base_currency, base_currency) if tx else None
+        ok = tx is not None and float(tx_amount) <= float(condition["value"])
+        return ok, f"amount {round(float(tx_amount), 2) if tx else 'n/a'} {base_currency} <= {condition['value']}"
+    if ctype == "currency_eq":
+        tx_ccy = (tx.currency or base_currency).upper() if tx else "n/a"
+        expected = str(condition.get("value", "")).upper()
+        ok = tx is not None and tx_ccy == expected
+        return ok, f"currency {tx_ccy} == {expected}"
     if ctype == "day_of_month_eq":
         ok = now.day == int(condition["value"])
         return ok, f"day {now.day} == {condition['value']}"
@@ -114,6 +128,8 @@ def run_rule(session, rule: models.Rule, event: dict, tx: models.Transaction | N
         return existing, []
 
     trace: dict = {"trigger": False, "conditions": [], "actions": [], "dry_run": dry_run}
+    settings = get_or_create_user_settings(session)
+    base_currency = settings.base_currency or "USD"
     latest_snapshot = session.scalar(select(models.BalanceSnapshot).order_by(models.BalanceSnapshot.snapshot_at.desc()))
     latest_balance = latest_snapshot.balance if latest_snapshot else None
 
@@ -125,7 +141,7 @@ def run_rule(session, rule: models.Rule, event: dict, tx: models.Transaction | N
 
     trace["trigger"] = True
     for condition in rule.conditions:
-        ok, message = check_condition(condition, tx, latest_balance)
+        ok, message = check_condition(session, condition, tx, latest_balance, base_currency=base_currency)
         trace["conditions"].append({"condition": condition, "ok": ok, "message": message})
         if not ok:
             run = models.Run(rule_id=rule.id, event_key=event["event_key"], status="condition_failed", trace=trace)

@@ -8,6 +8,8 @@ import pandas as pd
 from sqlalchemy import select
 
 from db import models
+from services.fx import convert_amount
+from services.user_settings import get_or_create_user_settings
 
 
 @dataclass
@@ -54,12 +56,21 @@ def _build_deterministic_schedule(start: date, horizon_days: int, monthly_income
     return df
 
 
-def _stochastic_remainder_estimate(session):
+def _stochastic_remainder_estimate(session, base_currency: str):
     txs = session.scalars(select(models.Transaction).order_by(models.Transaction.date)).all()
     if not txs:
         return {"weekday_mean": {i: 0.0 for i in range(7)}, "q10": 0.0, "q50": 0.0, "q90": 0.0}
 
-    df = pd.DataFrame([{"date": t.date, "amount": t.amount} for t in txs])
+    rows = []
+    for t in txs:
+        rows.append(
+            {
+                "date": t.date,
+                "amount": convert_amount(session, t.amount, from_currency=t.currency or base_currency, to_currency=base_currency),
+            }
+        )
+
+    df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
     daily = df.groupby("date", as_index=False)["amount"].sum()
     daily["weekday"] = daily["date"].dt.weekday
@@ -75,11 +86,14 @@ def _stochastic_remainder_estimate(session):
     return {"weekday_mean": weekday_mean, "q10": q10, "q50": q50, "q90": q90}
 
 
-def generate_hybrid_forecast(session, starting_balance: float = 0.0, horizon_days: int = 30):
+def generate_hybrid_forecast(session, starting_balance: float = 0.0, horizon_days: int = 30, base_currency: str | None = None):
     start = date.today()
+    settings = get_or_create_user_settings(session)
+    fx_base = (base_currency or settings.base_currency or "USD").upper()
+
     monthly_income, pay_frequency, bills = _load_income_and_bills(session)
     det = _build_deterministic_schedule(start, horizon_days, monthly_income, pay_frequency, bills)
-    stochastic = _stochastic_remainder_estimate(session)
+    stochastic = _stochastic_remainder_estimate(session, base_currency=fx_base)
 
     det["weekday"] = pd.to_datetime(det["date"]).dt.weekday
     det["stochastic_mean"] = det["weekday"].map(stochastic["weekday_mean"]).fillna(0.0)
@@ -92,8 +106,9 @@ def generate_hybrid_forecast(session, starting_balance: float = 0.0, horizon_day
     det["balance_p90"] = starting_balance + det["net_p90"].cumsum()
 
     det["p_negative"] = ((det["balance_p10"] < 0).astype(float) * 0.9 + (det["balance_p50"] < 0).astype(float) * 0.5) / 1.4
+    det["currency"] = fx_base
 
-    return det[["date", "deterministic_net", "net_p10", "net_p50", "net_p90", "balance_p10", "balance_p50", "balance_p90", "p_negative"]]
+    return det[["date", "deterministic_net", "net_p10", "net_p50", "net_p90", "balance_p10", "balance_p50", "balance_p90", "p_negative", "currency"]]
 
 
 def summarize_forecast(forecast_df: pd.DataFrame) -> ForecastSummary:

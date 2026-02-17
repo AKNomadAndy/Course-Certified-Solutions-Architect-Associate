@@ -29,7 +29,7 @@ def test_trigger_matching(session):
 
 def test_condition_eval(session):
     tx = models.Transaction(date=date(2024, 1, 1), description="x", amount=12, tx_hash="z")
-    ok, _ = check_condition({"type": "amount_gte", "value": 10}, tx, None)
+    ok, _ = check_condition(session, {"type": "amount_gte", "value": 10}, tx, None)
     assert ok
 
 
@@ -58,3 +58,9 @@ def test_idempotent_run_creation(session):
     run1, _ = run_rule(session, rule, {"event_key": "same", "type": "transaction"}, tx)
     run2, _ = run_rule(session, rule, {"event_key": "same", "type": "transaction"}, tx)
     assert run1.id == run2.id
+
+
+def test_currency_condition(session):
+    tx = models.Transaction(date=date(2024, 1, 1), description="x", amount=12, tx_hash="zc", currency="EUR")
+    ok, _ = check_condition(session, {"type": "currency_eq", "value": "EUR"}, tx, None)
+    assert ok

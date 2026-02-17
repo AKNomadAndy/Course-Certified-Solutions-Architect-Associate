@@ -22,7 +22,7 @@ FlowLedger is a personal-only money router MVP built as an original, dry-run-fir
 - ✅ Better graph editing (inline edge/rule editing)
 
 ### V2
-- Multi-currency controls
+- ✅ Multi-currency controls (FX table + forecast/rules-aware conversions)
 - Rule versioning and rollback snapshots
 - Package split to API + frontend while keeping service layer unchanged
 
@@ -118,6 +118,7 @@ scheduler_tick():
 - **Rule Builder**
   - Trigger selector (transaction/schedule/manual)
   - JSON-based condition/action wizard + quick templates + no-code helper
+  - Currency-aware rule conditions/triggers (`currency_eq`, optional trigger currency)
   - Clean editor with create/update/delete + enabled toggle + simulate latest transaction
 - **Simulator**
   - Rule picker + lookback days (default 90)
@@ -126,12 +127,14 @@ scheduler_tick():
   - Deterministic schedule from bills + income
   - Stochastic remainder from historical daily behavior
   - P10/P50/P90 balance bands, overdraft risk, and safe-to-spend metric
+  - Forecast currency selector with FX-aware stochastic conversion
 - **Activity**
   - Run timeline, trace view, CSV export
 - **Next Actions**
   - Manual checklist with mark done + note + reference id
 - **Settings**
   - CSV import
+  - FX rates table management for personal multi-currency planning
   - Idempotent “Load Demo Data”
   - CSV defaults documented in UI
 

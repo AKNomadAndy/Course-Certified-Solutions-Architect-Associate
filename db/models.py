@@ -160,6 +160,17 @@ class Task(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class FxRate(Base):
+    __tablename__ = "fx_rates"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    base_currency: Mapped[str] = mapped_column(String(8))
+    quote_currency: Mapped[str] = mapped_column(String(8))
+    rate: Mapped[float] = mapped_column(Float)
+    source: Mapped[str] = mapped_column(String(40), default="manual")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (UniqueConstraint("base_currency", "quote_currency", name="uq_fx_pair"),)
+
+
 class IncomeProfile(Base):
     __tablename__ = "income_profiles"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

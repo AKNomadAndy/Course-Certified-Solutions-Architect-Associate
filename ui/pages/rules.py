@@ -6,6 +6,7 @@ import streamlit as st
 from sqlalchemy import select
 
 from db import models
+from services.fx import available_currencies
 from services.rule_templates import build_template_payload, list_rule_templates
 from services.rules_engine import run_rule
 
@@ -28,6 +29,7 @@ def render(session):
 
     templates = list_rule_templates()
     pods = session.scalars(select(models.Pod).order_by(models.Pod.name)).all()
+    currencies = available_currencies(session)
 
     with st.expander("Quick-start templates", expanded=True):
         tcol1, tcol2, tcol3 = st.columns([2, 1, 1])
@@ -71,15 +73,19 @@ def render(session):
         }
 
     with st.expander("No-code condition/action helper"):
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         contains = c1.text_input("Transaction description contains", value="Payroll")
         amount_gte = c2.number_input("Min transaction amount", value=100.0, step=10.0)
         alloc_percent = c3.slider("Allocate percent", min_value=0, max_value=100, value=50)
+        helper_currency = c4.selectbox("Transaction currency", currencies, index=0)
         chosen_pod = st.selectbox("Allocate to pod", list(pod_map.keys()), key="helper_pod")
         if st.button("Build rule JSON from helper"):
             helper_payload = {
                 "trigger_config": {"description_contains": contains},
-                "conditions": [{"type": "amount_gte", "value": float(amount_gte)}],
+                "conditions": [
+                    {"type": "amount_gte", "value": float(amount_gte)},
+                    {"type": "currency_eq", "value": helper_currency},
+                ],
                 "actions": [{"type": "allocate_percent", "pod_id": pod_map[chosen_pod], "percent": int(alloc_percent)}],
             }
             st.session_state["rule_trigger_config"] = json.dumps(helper_payload["trigger_config"], indent=2)
