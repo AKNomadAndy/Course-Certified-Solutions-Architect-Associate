@@ -136,6 +136,7 @@ scheduler_tick():
   - Visualize due-day load + category mix + remaining cash
   - Generate current-month bill tasks
   - One-click load of your full provided bill + debt list
+  - One-click load of your complete personal workspace across pages (map/rules/activity/planner)
   - Generate debt reduction/payment plan from liabilities + remaining cash
   - View debt payoff schedule projection with monthly trend and interest summary
 - **Rule Builder**

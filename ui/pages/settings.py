@@ -20,6 +20,7 @@ from services.imports import (
     list_merchant_category_rules,
     upsert_merchant_category_rule,
 )
+from services.personal_workspace import load_full_personal_workspace
 from services.user_settings import AUTOPILOT_MODES, get_or_create_user_settings, save_user_settings
 
 
@@ -251,6 +252,19 @@ def render(session):
         load_demo_data(session, ".")
         st.toast("Demo loaded")
         st.success("Demo data is ready. Visit Money Map.")
+
+    if st.button("Load My Complete Personal Workspace", type="primary"):
+        try:
+            create_db_snapshot(reason="before_personal_workspace_load")
+        except Exception:
+            pass
+        summary = load_full_personal_workspace(session)
+        st.toast("Personal workspace loaded")
+        st.success(
+            "Loaded across pages: "
+            f"accounts={summary['accounts']}, pods={summary['pods']}, liabilities={summary['liabilities']}, "
+            f"rules={summary['rules']}, transactions={summary['transactions']}"
+        )
 
     st.markdown(
         """
