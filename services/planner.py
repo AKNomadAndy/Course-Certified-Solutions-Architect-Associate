@@ -457,6 +457,67 @@ def build_personal_weekly_actions(session):
     return sorted(actions, key=lambda x: (x["date"], 0 if x["priority"] == "high" else 1, x["action"]))
 
 
+def build_cash_runway_projection(session, horizon_days: int = 84):
+    today = date.today()
+    profile = get_or_create_income_profile(session)
+    starting_balance = float(profile.current_checking_balance or 0.0)
+    cal_df = build_income_bill_calendar(session, horizon_days=horizon_days)
+
+    if cal_df.empty:
+        empty_daily = pd.DataFrame([{"date": today, "net": 0.0, "running_balance": starting_balance}])
+        return {
+            "starting_balance": round(starting_balance, 2),
+            "daily": empty_daily,
+            "checkpoints": {"4_weeks": round(starting_balance, 2), "8_weeks": round(starting_balance, 2), "12_weeks": round(starting_balance, 2)},
+            "minimum_balance": round(starting_balance, 2),
+            "minimum_balance_date": today,
+            "first_shortfall_date": None,
+            "upcoming_bills": pd.DataFrame(columns=["date", "name", "amount", "days_until_due"]),
+        }
+
+    daily = cal_df.groupby("date", as_index=False)["net"].first().sort_values("date")
+    balance = starting_balance
+    run_vals = []
+    for v in daily["net"].tolist():
+        balance += float(v)
+        run_vals.append(round(balance, 2))
+    daily["running_balance"] = run_vals
+
+    min_idx = int(daily["running_balance"].idxmin())
+    min_balance = float(daily.loc[min_idx, "running_balance"])
+    min_date = daily.loc[min_idx, "date"]
+
+    shortfall = daily[daily["running_balance"] < 0]
+    first_shortfall_date = None if shortfall.empty else shortfall.iloc[0]["date"]
+
+    def checkpoint(days: int) -> float:
+        target = today + timedelta(days=days)
+        subset = daily[daily["date"] <= target]
+        if subset.empty:
+            return round(starting_balance, 2)
+        return float(subset.iloc[-1]["running_balance"])
+
+    upcoming_bills = cal_df[(cal_df["event_type"] == "bill") & (cal_df["date"] >= today)].copy()
+    if not upcoming_bills.empty:
+        upcoming_bills["amount"] = upcoming_bills["amount"].abs().round(2)
+        upcoming_bills["days_until_due"] = upcoming_bills["date"].apply(lambda d: (d - today).days)
+        upcoming_bills = upcoming_bills[["date", "name", "amount", "days_until_due"]].sort_values(["date", "name"]).head(25)
+
+    return {
+        "starting_balance": round(starting_balance, 2),
+        "daily": daily,
+        "checkpoints": {
+            "4_weeks": round(checkpoint(28), 2),
+            "8_weeks": round(checkpoint(56), 2),
+            "12_weeks": round(checkpoint(84), 2),
+        },
+        "minimum_balance": round(min_balance, 2),
+        "minimum_balance_date": min_date,
+        "first_shortfall_date": first_shortfall_date,
+        "upcoming_bills": upcoming_bills,
+    }
+
+
 def summarize_debt_payoff(schedule_df: pd.DataFrame):
     if schedule_df.empty:
         return {"months": 0, "total_interest": 0.0, "ending_total_balance": 0.0}

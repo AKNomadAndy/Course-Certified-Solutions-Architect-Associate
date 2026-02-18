@@ -10,6 +10,7 @@ from services.planner import (
     build_debt_payment_plan,
     build_debt_payoff_schedule,
     build_income_bill_calendar,
+    build_cash_runway_projection,
     build_personal_weekly_actions,
     build_today_console,
     generate_monthly_bill_tasks,
@@ -66,6 +67,39 @@ def render(session):
 
     _render_today_console(session)
     _render_weekly_actions(session)
+
+    st.subheader("Bill Calendar & Cash Runway")
+    horizon = st.slider("Projection horizon (days)", min_value=28, max_value=120, value=84, step=7)
+    runway = build_cash_runway_projection(session, horizon_days=int(horizon))
+
+    r1, r2, r3, r4 = st.columns(4)
+    r1.metric("Starting checking", f"${runway['starting_balance']:.2f}")
+    r2.metric("Projected 4 weeks", f"${runway['checkpoints']['4_weeks']:.2f}")
+    r3.metric("Projected 8 weeks", f"${runway['checkpoints']['8_weeks']:.2f}")
+    r4.metric("Projected 12 weeks", f"${runway['checkpoints']['12_weeks']:.2f}")
+
+    s1, s2 = st.columns(2)
+    s1.metric("Lowest projected balance", f"${runway['minimum_balance']:.2f}", delta=str(runway['minimum_balance_date']))
+    shortfall_text = str(runway["first_shortfall_date"]) if runway["first_shortfall_date"] else "None"
+    s2.metric("First shortfall date", shortfall_text)
+
+    if runway["first_shortfall_date"]:
+        st.error(
+            f"Warning: projected negative balance on {runway['first_shortfall_date']}. "
+            "Review upcoming bills and reduce discretionary spending."
+        )
+    else:
+        st.success("No negative-balance days projected in this horizon.")
+
+    daily_df = runway["daily"].copy()
+    if not daily_df.empty:
+        st.line_chart(daily_df.set_index("date")[["running_balance"]])
+
+    st.caption("Upcoming bills to pay")
+    if isinstance(runway["upcoming_bills"], pd.DataFrame) and not runway["upcoming_bills"].empty:
+        st.dataframe(runway["upcoming_bills"], use_container_width=True)
+    else:
+        st.info("No upcoming bills in selected horizon.")
 
     profile = get_or_create_income_profile(session)
 

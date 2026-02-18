@@ -133,6 +133,8 @@ scheduler_tick():
   - Mark bills paid with one click and reset paid flags
   - Set next pay date + current checking amount
   - Visual calendar timeline of upcoming income and bills
+  - Clean cash-runway projection (4/8/12-week balances + shortfall warning date)
+  - Upcoming-bills table with due countdown for easier payment planning
   - Visualize due-day load + category mix + remaining cash
   - Generate current-month bill tasks
   - One-click load of your full provided bill + debt list
